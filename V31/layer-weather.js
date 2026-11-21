@@ -1,6 +1,6 @@
 import { noPick, inView } from './layer-common.js';
 
-const LAT = 52.4, LON = 4.9;
+const LAT = 52, LON = 5;
 const READOUT_KEY = 'room.weather.readout';
 const FACADE = 120;
 const RIGHT = FACADE + 90;

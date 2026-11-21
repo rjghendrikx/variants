@@ -1,6 +1,0 @@
-bench
-projector
-shelf
-notebook
-+cabinet
-+tape

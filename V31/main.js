@@ -79,15 +79,6 @@ for (const a of document.querySelectorAll('#work article[data-case]')) {
   CASES[id] = { ...c, in: a.dataset.in, acts: [...(OWN_ACTS[id] ?? []), ...c.acts] };
   CASES[a.dataset.in].acts.push({ label: OWN[id], case: id });
 }
-const PLATO = {
-  projector: { k: 'Try it', t: 'Projection mapping',
-    b: 'First the projector measures the head: its stripes label every point with a column and a row, and the camera beside the lens triangulates the depth. Then the head becomes a canvas. The buttons step through what a mapping studio shows: white, wire, template, mask, content.',
-    acts: [{ label: 'Run the scan and the show', run: (L) => L.projector?.start() }] },
-  room: 'Watch the projector: its stripes label the head point by point, the head becomes its own point cloud, and then a canvas for light.',
-  scan: ['The projector is scanning Plato', 'Stripes of light label every point on the head; then it becomes its own point cloud, and then a canvas.'],
-  pill: 'Scanning Plato · see it up close',
-  proof: { label: 'The cast at SMK', href: 'https://open.smk.dk/artwork/image/KAS2111', ext: true },
-};
 const CAPTION_OF = { disks: 'pr_floppybox', c64: 'c64', optics: 'optics', hifi: 'amp', canal: 'raindrop', decks: 'pr_xdj', tape: 'pr_tape' };
 const PLACE_CARDS = {
   table: 'From here: the C64, Agents on the laptop, the hi-fi.',
@@ -105,7 +96,7 @@ const NAV_HINT_KEY = 'room.navhint.v2';
 const NAV_HINT = { touch: 'Tap anywhere outside it to go back to the room', mouse: 'Click anywhere outside it, or press Esc, to go back to the room' };
 const MOVE_HINT = { touch: 'Tap the floor to walk · two fingers to slide', mouse: 'Click the floor to walk · right-drag to slide · arrows/WASD · Esc for the room' };
 const HOT = {
-  cloud_chamber: 'chamber', pr_terminal: 'terminal', plato: 'experiment', at_plinth: 'experiment', scan_target: 'experiment',
+  cloud_chamber: 'chamber', pr_terminal: 'terminal', at_plinth: 'experiment', scan_target: 'experiment',
   projector: 'projector', optics: 'optics', bench: 'bench', geiger: 'bench', scope: 'bench',
   c64: 'c64', pr_c64mon: 'c64', ti83: 'c64', amp: 'hifi', pr_dm603: 'hifi', pr_ifi: 'hifi', pr_hd660: 'hifi', rack: 'hifi',
   pr_poster_action: 'action',
@@ -166,7 +157,7 @@ const WALK = { perMetre: 700, min: 650, max: 6000 };
 const ORBIT = { az: 0.35, polarUp: 0.18, polarDown: 0.12, near: 0.85, far: 1.12 };
 const PORTRAIT_MAX = 1.9;
 const PORTRAIT_SHIFT = [0.05, 0.14];
-const PORTRAIT_VIEW = { disks: { shift: [0, -0.10] }, vitrine: { shift: [-0.03, 0.02], max: 1.5 }, c64: { shift: [-0.16, -0.22], max: 1.6 } };
+const PORTRAIT_VIEW = { disks: { shift: [0, -0.10] }, vitrine: { shift: [-0.05, 0.02], max: 1.4 }, c64: { shift: [-0.16, -0.22], max: 1.6 } };
 const PORTRAIT_PAGE = { c64: { shift: [-0.18, -0.18], max: 1.0 } };
 const paged = (id) => window.__room?.layers?.[id]?.info?.().disk != null;
 const shift3 = (s) => [s?.[0] ?? 0, s?.[1] ?? 0, s?.[2] ?? PORTRAIT_MAX];
@@ -240,8 +231,13 @@ function addPropGlass(scene) {
   return glass;
 }
 
+function stillLine(text) {
+  const s = document.querySelector('.status');
+  if (s) { s.textContent = text; s.hidden = false; }
+}
+
 async function start() {
-  if (!webglAvailable()) { state.mode = 'fallback'; state.ready = true; return; }
+  if (!webglAvailable()) { stillLine('This browser cannot draw the 3D room (no WebGL), so this is a still of it.'); state.mode = 'fallback'; state.ready = true; return; }
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -276,10 +272,6 @@ async function start() {
     }));
   }
   const byName = (n) => scene.getObjectByName(n);
-  const head = !!byName('plato');
-  if (head) {
-    Object.assign(CASES.projector, PLATO.projector, { acts: [...PLATO.projector.acts, ...CASES.projector.acts.filter((a) => a.case)] });
-  }
   for (const c of Object.values(CASES)) if (c.acts) c.acts = c.acts.filter((a) => !a.need || byName(a.need));
   if (GLASS) { const cc = byName('cloud_chamber'); if (cc) addGlass(cc); addPropGlass(scene); }
 
@@ -1161,8 +1153,8 @@ async function start() {
   if (views.some((v) => v.id === 'experiment')) addEventListener('room:scan', () => {
     if (current.id !== 'overview' || tween || !caseEl) return;
     if (narrow.matches) { scanPill(); return; }
-    CASES.overview = { k: 'Live', t: head ? PLATO.scan[0] : 'The projector is scanning the vase',
-      b: head ? PLATO.scan[1] : 'Stripes of light label every point on it; in a moment it turns into its own point cloud.',
+    CASES.overview = { k: 'Live', t: 'The projector is scanning the vase',
+      b: 'Stripes of light label every point on it; in a moment it turns into its own point cloud.',
       acts: [{ label: 'See it up close', run: () => go('experiment') }] };
     showCase('overview');
     delete CASES.overview;
@@ -1175,7 +1167,7 @@ async function start() {
     const prompt = document.querySelector('.prompt');
     const pill = document.createElement('p');
     pill.className = 'prompt scan';
-    const b = Object.assign(document.createElement('button'), { type: 'button', textContent: head ? PLATO.pill : 'Scanning the vase · see it up close' });
+    const b = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Scanning the vase · see it up close' });
     b.addEventListener('click', () => { pill.remove(); go('experiment'); });
     pill.appendChild(b);
     const was = prompt?.hidden;
@@ -1503,5 +1495,6 @@ function report() {
 }
 start().catch((err) => {
   console.error('room viewer failed, showing the still:', err);
+  stillLine('The 3D room did not load, so this is a still of it.');
   state.mode = 'fallback'; state.error = String(err); state.ready = true;
 }).finally(report);
