@@ -10,7 +10,7 @@ const params = new URLSearchParams(location.search);
 const GATE = params.has('gate');
 const GLASS = !params.has('noglass');
 const LIVE = !params.has('nolive');
-const LAYERS = ['layer-terminal.js', 'layer-projector.js', 'layer-chamber.js', 'layer-geiger.js', 'layer-eraser.js', 'layer-rain.js', 'layer-water.js', 'layer-audio.js', 'layer-hotspots.js', 'layer-tags.js', 'layer-walk.js', 'layer-lidar.js', 'layer-deck.js', 'layer-books.js', 'layer-stage.js', 'layer-c64.js', 'layer-hypercard.js', 'layer-tape.js', 'layer-intro.js', 'layer-gpu.js'];
+const LAYERS = ['layer-terminal.js', 'layer-projector.js', 'layer-chamber.js', 'layer-geiger.js', 'layer-eraser.js', 'layer-rain.js', 'layer-water.js', 'layer-audio.js', 'layer-hotspots.js', 'layer-tags.js', 'layer-walk.js', 'layer-lidar.js', 'layer-deck.js', 'layer-books.js', 'layer-stage.js', 'layer-c64.js', 'layer-hypercard.js', 'layer-tape.js', 'layer-walker.js', 'layer-intro.js', 'layer-gpu.js'];
 const POLARIZER = (L) => (L.eraser?.info().inBeam ? 'Take the polarizer out' : 'Insert the polarizer');
 const WORK = Object.fromEntries(Object.entries(C.work_room).map(([id, room]) => [id, { room, acts: [] }]));
 function workCase(id, { room, acts }, el = null) {
@@ -73,12 +73,12 @@ for (const a of document.querySelectorAll('#work article[data-case]')) {
   CASES[id] = { ...c, in: a.dataset.in, acts: [...(OWN_ACTS[id] ?? []), ...c.acts] };
   CASES[a.dataset.in].acts.push({ label: OWN[id], case: id });
 }
-const CAPTION_OF = { disks: 'pr_floppybox', c64: 'c64', optics: 'optics', hifi: 'amp', canal: 'raindrop', decks: 'pr_xdj', tape: 'pr_tape' };
+const CAPTION_OF = { disks: 'pr_floppybox', c64: 'c64', optics: 'optics', hifi: 'amp', canal: 'raindrop', decks: 'pr_xdj', tape: 'pr_tape', droplet: 'pr_walker' };
 const PLACE_CARDS = C.place_cards;
 const DECK_ACT = (L) => (L.deck?.info().playing ? 'Stop the track' : 'Play the track');
-const CAPTION_ACTS = { optics: [{ label: POLARIZER, run: (L) => L.eraser?.toggle(false) }], decks: [{ label: DECK_ACT, run: (L) => L.deck?.toggle() }] };
+const CAPTION_ACTS = { droplet: [{ label: 'Start again', run: (L) => L.walker?.restart() }], optics: [{ label: POLARIZER, run: (L) => L.eraser?.toggle(false) }], decks: [{ label: DECK_ACT, run: (L) => L.deck?.toggle() }] };
 const WORK_ORDER = ['simulations', 'terminal', 'ml'];
-const ALIAS = { chamber: 'simulations', experiment: 'ml', mapping: 'ml', projector: 'hifi', bench: 'pc', cryostat: 'pc', table: 'desk', optics: 'overview', walker: 'action', droplet: 'action', books: 'vitrine' };
+const ALIAS = { chamber: 'simulations', experiment: 'ml', mapping: 'ml', projector: 'hifi', bench: 'pc', cryostat: 'pc', table: 'desk', optics: 'overview', walker: 'droplet', books: 'vitrine' };
 const CHIP_STANDS = ['window'];
 const HINT = { touch: C.hints.first_touch };
 const HINT_KEY = 'room.glowhint.v1';
@@ -100,6 +100,7 @@ const HOT = {
   pr_xdj: 'decks', pr_djm450: 'decks',
   pr_tape: 'tape',
   pr_midi: 'decks', pr_mapkit: 'decks',
+  pr_walker: 'droplet',
 };
 const CASE_OF = { pr_3090: 'inference', pr_nr200: 'inference', projector: 'metal', pr_ledmatrix: 'metal' };
 const OWN_TAG = { inference: 'Local inference', metal: 'Metal visuals' };
@@ -147,7 +148,7 @@ const WALK = { perMetre: 700, min: 650, max: 6000 };
 const ORBIT = { az: 0.35, polarUp: 0.18, polarDown: 0.12, near: 0.85, far: 1.12 };
 const PORTRAIT_MAX = 1.9;
 const PORTRAIT_SHIFT = [0.05, 0.14];
-const PORTRAIT_VIEW = { disks: { shift: [0, -0.10], max: 1.45 }, vitrine: { shift: [-0.05, 0.02], max: 1.4 }, c64: { shift: [-0.16, -0.22], max: 1.6 } };
+const PORTRAIT_VIEW = { droplet: { shift: [-0.06, 0.10], max: 2.4 }, disks: { shift: [0, -0.10], max: 1.45 }, vitrine: { shift: [-0.05, 0.02], max: 1.4 }, c64: { shift: [-0.16, -0.22], max: 1.6 } };
 const PORTRAIT_PAGE = { c64: { shift: [-0.18, -0.18], max: 1.0 } };
 const paged = (id) => window.__room?.layers?.[id]?.info?.().disk != null;
 const shift3 = (s) => [s?.[0] ?? 0, s?.[1] ?? 0, s?.[2] ?? PORTRAIT_MAX];
