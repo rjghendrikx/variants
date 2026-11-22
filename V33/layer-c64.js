@@ -32,10 +32,9 @@ const STORY = [
 const DIR_HEAD = '0 "RUUD HENDRIKX   " RH 2A';
 const DIR = [[24, 'UVA.PHYS+PHIL'], [18, 'UVA.MSC.PHYSICS'], [30, 'AMOLF.OPTOMECH'], [42, 'VU.2DES'], [20, 'PGGM.DATASCI'],
   [16, 'WARTSILA.ML'], [22, 'TELE2.VOICE'], [36, 'ING.COLLECTIONS'], [48, 'SCHIPHOL.SIM'], [30, 'STEEL.TWIN'],
-  [44, 'ENECO.SQUAD'], [40, 'SCHIPHOL.LLM'], [12, 'EMISSARY'], [0, 'MASTER', 'DEL']];
+  [44, 'ENECO.SQUAD'], [40, 'SCHIPHOL.LLM']];
 const DIR_FREE = 664 - DIR.reduce((n, [b]) => n + b, 0);
 const DISK_VIEW = { SIMULATIONS: 'simulations', AGENTS: 'terminal', 'MACHINE LEARNING': 'ml' };
-const EMISSARY = ['10 PRINT CHR$(205.5+RND(1));', '20 GOTO 10'];
 const HELP = ['TRY LIST, RUN, PRINT 2+2 OR', '10 PRINT "HI":GOTO 10', 'ESC STOPS A PROGRAM, THEN LEAVES.'];
 const ABOUT = ['A BASIC WRITTEN BY HAND FOR THIS', 'ROOM: NO ROMS, NO EMULATOR.', 'THE ROOM IS A PROGRAM TOO.'];
 
@@ -430,12 +429,11 @@ export default function mount(live) {
     println(`SEARCHING FOR ${name}`);
     if (drive && name === 'RULIAD') { println('LOADING'); println('?OUT OF MEMORY  ERROR'); return; }
 
-    const known = name === '$' || name === 'EMISSARY' || DISK_VIEW[name];
+    const known = name === '$' || DISK_VIEW[name];
     if (!known) { println('?FILE NOT FOUND  ERROR'); return; }
     println('LOADING');
     if (name === '$') { dir = true; return; }
     dir = false;
-    if (name === 'EMISSARY') { load(EMISSARY); return; }
     const v = DISK_VIEW[name];
     if (window.__room?.views?.().some((x) => x.id === v)) {
       loadingTo = v;
@@ -619,7 +617,7 @@ export default function mount(live) {
   const flatQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
   const atSlot = (k) => { const s0 = toB(dx['1541_slot_pos']); return worldPose(drvF, s0.add(new THREE.Vector3(0, -SZ / 2 - 0.015 + k * (SZ + 0.015), 0)), flatQ); };
   function place(fl) {
-    if (!disk || !fl.slab) return false;
+    if (!disk || fl.slab == null) return false;
     const t = fl.t;
     if (t >= FLY.arc + FLY.slide) { scene().remove(disk); return false; }
     if (t < FLY.arc) {
@@ -652,15 +650,10 @@ export default function mount(live) {
     E.push([SEQ.type[1] + 0.05, () => newline()]);
     E.push([SEQ.seated, () => { setLed(true); dispatchEvent(new CustomEvent('room:drive', { detail: { slug: d.slug } })); }]);
     E.push([SEQ.search, () => println(`SEARCHING FOR ${d.name}`)]);
-    if (d.slug === 'master') {
-      E.push([SEQ.steady, () => { println('?FILE NOT FOUND  ERROR'); println('READY.'); setLed(false); }]);
-      return E;
-    }
     E.push([SEQ.loading, () => println('LOADING')]);
     E.push([SEQ.ready, () => { println('READY.'); setLed(false); prog.clear(); vars.clear(); arrays.clear();
-      if (d.slug === 'emissary') load(EMISSARY); else store(`10 REM ${d.name}`); }]);
+      store(`10 REM ${d.name}`); }]);
     for (let j = 0; j < 3; j++) E.push([SEQ.run[0] + j * (SEQ.run[1] - SEQ.run[0]) / 2, () => putc('RUN'.charCodeAt(j))]);
-    if (d.slug === 'emissary') { E.push([SEQ.clear, () => { input = 'RUN'; enter(); }]); return E; }
     E.push([SEQ.clear, () => clear()]);
     E.push([SEQ.clear, () => bar(`${number(d)}/${String(CV).padStart(2, '0')} ${d.name}`)]);
     const rows = ['', ...screenRows(d), '', 'READY.'];

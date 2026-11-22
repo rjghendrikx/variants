@@ -788,16 +788,6 @@
      "The case: LOAD\"AGENTS\",8"
     ]
    ]
-  },
-  {
-   "slug": "emissary",
-   "name": "EMISSARY",
-   "stripe": "#e8e2cc"
-  },
-  {
-   "slug": "master",
-   "name": "MASTER",
-   "stripe": "#e8e2cc"
   }
  ],
  "case_disks": [
@@ -983,7 +973,7 @@
    "author": "SCHOPENHAUER · I",
    "size_m": [
     0.034,
-    0.216,
+    0.224,
     0.14
    ],
    "ground": "#1f2a3a",
