@@ -63,7 +63,7 @@ export default function mount(live) {
   const D = dk?.userData, M = mx?.userData;
   if (!D?.xdj_screen_center || !M?.djm450_xf_center) return null;
   dk.updateMatrixWorld(true); mx.updateMatrixWorld(true);
-  const { title, artist, tag } = C.deck;
+  const { title, artist, tag, empty, browse } = C.deck;
   const V = (a) => new THREE.Vector3(...a);
   const wDk = (v) => V(v).applyMatrix4(dk.matrixWorld), wMx = (v) => V(v).applyMatrix4(mx.matrixWorld);
   const axisOf = (node, a) => V(a).transformDirection(node.matrixWorld);
@@ -244,8 +244,8 @@ export default function mount(live) {
       g2.fillStyle = i < B ? '#5a3a24' : '#c87837'; g2.fillRect(x, (o0 + o1) / 2 - e * 18, 1, e * 36 + 1);
     }
     g2.fillStyle = ink; g2.fillRect(16 + (B / (BARS * 4)) * (w - 32), o0 - 2, 2, o1 - o0 + 4);
-    g2.font = F(38, true); g2.fillStyle = mute; g2.fillText('No track loaded', 16, h + 12);
-    g2.font = F(24); g2.fillStyle = '#6e5c4a'; g2.fillText('Browse to load', 16, h + 54);
+    g2.font = F(38, true); g2.fillStyle = mute; g2.fillText(empty, 16, h + 12);
+    g2.font = F(24); g2.fillStyle = '#6e5c4a'; g2.fillText(browse, 16, h + 54);
     tex.needsUpdate = true;
   }
   function controls() {

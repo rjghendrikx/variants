@@ -1,8 +1,13 @@
 {
  "page": {
+  "title": "Ruud Hendrikx, creative technologist and physicist",
+  "description": "Ruud Hendrikx, creative technologist and physicist, builds AI agents, machine learning and simulations, at the meeting point of science, philosophy and art. Walk into his workroom, live in the browser.",
+  "share": "Simulations, machine learning and AI agents, made visible. Walk into his workroom, live in the browser. Available for projects.",
   "name": "Ruud Hendrikx",
   "tagline": "Creative technologist and physicist. Builds AI agents, machine learning and simulations, at the meeting point of science, philosophy and art",
   "available": "available for projects",
+  "offer": "Creative technologist and physicist. He builds AI agents, machine learning models and simulations, and makes them something you can see and use. The agents go in close and fast; he keeps the whole in view and decides where they go.",
+  "ask": "Available for freelance projects, hands-on or as technical lead.",
   "work": [
    {
     "view": "simulations",
@@ -234,6 +239,13 @@
    }
   ]
  },
+ "contact": {
+  "email": "info@ruudhendrikx.nl",
+  "heading": "Work with him",
+  "text": "Available for freelance projects: AI agents, simulations, or something people can see and use, hands-on or as technical lead.",
+  "linkedin": "https://linkedin.com/in/rjghx/",
+  "linkedin_label": "Full history on LinkedIn"
+ },
  "status": {
   "loading": "Loading the room…",
   "no_webgl": "This browser cannot draw the 3D room (no WebGL), so this is a still of it.",
@@ -263,7 +275,9 @@
  "deck": {
   "title": "Night Shift (room loop)",
   "artist": "Ruud Hendrikx",
-  "tag": "SYNTH"
+  "tag": "SYNTH",
+  "empty": "No track loaded",
+  "browse": "Browse to load"
  },
  "cards": [
   [
