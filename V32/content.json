@@ -837,12 +837,15 @@
    ],
    "author": "ABRAM",
    "size_m": [
-    0.026,
-    0.215,
-    0.15
+    0.022,
+    0.206,
+    0.132
    ],
-   "ground": "#343a24",
-   "ink": "#f6eed6"
+   "ground": "#3a6cac",
+   "ink": "#f6f8f6",
+   "style": {
+    "face": "serif"
+   }
   },
   {
    "key": "myself",
@@ -853,12 +856,15 @@
    ],
    "author": "KOCH",
    "size_m": [
-    0.032,
-    0.235,
-    0.16
+    0.03,
+    0.214,
+    0.148
    ],
    "ground": "#3a2a1e",
-   "ink": "#f8f0de"
+   "ink": "#f8f0de",
+   "style": {
+    "face": "narrow"
+   }
   },
   {
    "key": "feeling",
@@ -869,12 +875,16 @@
    ],
    "author": "KOCH",
    "size_m": [
-    0.032,
-    0.23,
-    0.155
+    0.03,
+    0.228,
+    0.152
    ],
-   "ground": "#101c34",
-   "ink": "#faf4e4"
+   "ground": "#252021",
+   "ink": "#f4f0ee",
+   "style": {
+    "face": "sans",
+    "author_ink": "#e0484f"
+   }
   },
   {
    "key": "matter1",
@@ -885,12 +895,15 @@
    ],
    "author": "McGILCHRIST · I",
    "size_m": [
-    0.05,
-    0.245,
-    0.17
+    0.046,
+    0.25,
+    0.169
    ],
    "ground": "#4a0e0c",
-   "ink": "#faeed6"
+   "ink": "#faeed6",
+   "style": {
+    "face": "serif"
+   }
   },
   {
    "key": "matter2",
@@ -901,12 +914,15 @@
    ],
    "author": "McGILCHRIST · II",
    "size_m": [
-    0.05,
-    0.245,
-    0.17
+    0.046,
+    0.25,
+    0.169
    ],
    "ground": "#4a0e0c",
-   "ink": "#faeed6"
+   "ink": "#faeed6",
+   "style": {
+    "face": "serif"
+   }
   },
   {
    "key": "case",
@@ -917,12 +933,15 @@
    ],
    "author": "HOFFMAN",
    "size_m": [
-    0.032,
-    0.235,
-    0.16
+    0.03,
+    0.197,
+    0.129
    ],
-   "ground": "#101014",
-   "ink": "#f2e48c"
+   "ground": "#d27c2c",
+   "ink": "#120a0c",
+   "style": {
+    "face": "black"
+   }
   },
   {
    "key": "irreducible",
@@ -932,12 +951,15 @@
    ],
    "author": "FAGGIN",
    "size_m": [
-    0.026,
-    0.23,
-    0.155
+    0.022,
+    0.216,
+    0.14
    ],
    "ground": "#1e2024",
-   "ink": "#faf4e6"
+   "ink": "#faf4e6",
+   "style": {
+    "face": "gothic"
+   }
   },
   {
    "key": "idea",
@@ -949,11 +971,15 @@
    "author": "KASTRUP",
    "size_m": [
     0.03,
-    0.23,
-    0.155
+    0.216,
+    0.14
    ],
-   "ground": "#1c302a",
-   "ink": "#faf8ee"
+   "ground": "#e4ded3",
+   "ink": "#33261b",
+   "style": {
+    "face": "serif",
+    "author_ink": "#5a4532"
+   }
   },
   {
    "key": "vital",
@@ -963,12 +989,16 @@
    ],
    "author": "NICK LANE",
    "size_m": [
-    0.03,
-    0.235,
-    0.16
+    0.024,
+    0.196,
+    0.128
    ],
-   "ground": "#ecbc4c",
-   "ink": "#0c0a08"
+   "ground": "#0e150d",
+   "ink": "#e4ecd2",
+   "style": {
+    "face": "narrow",
+    "author_ink": "#b8cf96"
+   }
   },
   {
    "key": "transformer",
@@ -978,12 +1008,16 @@
    ],
    "author": "NICK LANE",
    "size_m": [
-    0.03,
-    0.235,
-    0.16
+    0.028,
+    0.198,
+    0.128
    ],
-   "ground": "#183c36",
-   "ink": "#fcfaf2"
+   "ground": "#f3eff8",
+   "ink": "#1e0f2a",
+   "style": {
+    "face": "narrow",
+    "author_ink": "#1a0f1c"
+   }
   },
   {
    "key": "feynman1",
@@ -994,12 +1028,15 @@
    ],
    "author": "FEYNMAN · I",
    "size_m": [
-    0.042,
+    0.03,
     0.285,
-    0.22
+    0.226
    ],
-   "ground": "#5c0e0c",
-   "ink": "#fce8ac"
+   "ground": "#a0a2a1",
+   "ink": "#050606",
+   "style": {
+    "face": "black"
+   }
   },
   {
    "key": "feynman2",
@@ -1010,12 +1047,15 @@
    ],
    "author": "FEYNMAN · II",
    "size_m": [
-    0.042,
+    0.03,
     0.285,
-    0.22
+    0.226
    ],
-   "ground": "#5c0e0c",
-   "ink": "#fce8ac"
+   "ground": "#a0a2a1",
+   "ink": "#050606",
+   "style": {
+    "face": "black"
+   }
   },
   {
    "key": "gap",
@@ -1023,7 +1063,7 @@
    "title": [],
    "author": "",
    "size_m": [
-    0.042,
+    0.03,
     0.0,
     0.0
    ]
@@ -1037,12 +1077,16 @@
    ],
    "author": "FEYNMAN",
    "size_m": [
-    0.032,
-    0.242,
-    0.15
+    0.03,
+    0.197,
+    0.129
    ],
-   "ground": "#f0d44c",
-   "ink": "#0c0a08"
+   "ground": "#0c125e",
+   "ink": "#fbf8e2",
+   "style": {
+    "face": "narrow",
+    "author_ink": "#9c9bd0"
+   }
   },
   {
    "key": "qed",
@@ -1052,12 +1096,15 @@
    ],
    "author": "FEYNMAN",
    "size_m": [
-    0.022,
-    0.215,
-    0.14
+    0.018,
+    0.228,
+    0.125
    ],
-   "ground": "#102252",
-   "ink": "#faf8f0"
+   "ground": "#1d1c19",
+   "ink": "#fbfbfa",
+   "style": {
+    "face": "sans"
+   }
   },
   {
    "key": "bohm",
@@ -1068,28 +1115,36 @@
    ],
    "author": "BOHM",
    "size_m": [
-    0.032,
-    0.215,
-    0.14
+    0.03,
+    0.198,
+    0.129
    ],
-   "ground": "#f2f0e8",
-   "ink": "#0c0a08"
+   "ground": "#fbfaf8",
+   "ink": "#210908",
+   "style": {
+    "face": "narrow",
+    "author_ink": "#c8303f"
+   }
   },
   {
    "key": "dreams",
    "kind": "spine",
    "title": [
-    "THE DREAMS THAT STUFF",
+    "THE DREAMS",
+    "THAT STUFF",
     "IS MADE OF"
    ],
    "author": "HAWKING",
    "size_m": [
-    0.045,
-    0.25,
-    0.165
+    0.055,
+    0.237,
+    0.16
    ],
-   "ground": "#0c1224",
-   "ink": "#f6f2e4"
+   "ground": "#4f3a4c",
+   "ink": "#f4eaf2",
+   "style": {
+    "face": "serif"
+   }
   },
   {
    "key": "master",
@@ -1101,12 +1156,15 @@
    ],
    "author": "Iain McGilchrist",
    "size_m": [
-    0.135,
+    0.14,
     0.216,
-    0.03
+    0.04
    ],
-   "ground": "#ece6d6",
-   "ink": "#781e1c"
+   "ground": "#7ec69e",
+   "ink": "#1a3853",
+   "style": {
+    "face": "serif"
+   }
   },
   {
    "key": "spell",
@@ -1118,12 +1176,15 @@
    ],
    "author": "David Abram",
    "size_m": [
-    0.13,
-    0.203,
-    0.025
+    0.145,
+    0.198,
+    0.023
    ],
-   "ground": "#465c42",
-   "ink": "#f0e8d2"
+   "ground": "#0f241f",
+   "ink": "#e2e6d4",
+   "style": {
+    "face": "serif"
+   }
   },
   {
    "key": "nks",
@@ -1134,12 +1195,15 @@
    ],
    "author": "Stephen Wolfram",
    "size_m": [
-    0.18,
-    0.24,
-    0.06
+    0.207,
+    0.246,
+    0.063
    ],
-   "ground": "#ece8de",
-   "ink": "#18181c"
+   "ground": "#f6f6f4",
+   "ink": "#0e0e0e",
+   "style": {
+    "face": "sans"
+   }
   },
   {
    "key": "origin",
@@ -1150,12 +1214,15 @@
    ],
    "author": "Thomas Hertog",
    "size_m": [
-    0.135,
-    0.216,
-    0.03
+    0.162,
+    0.24,
+    0.033
    ],
-   "ground": "#16161e",
-   "ink": "#e8d296"
+   "ground": "#f1eede",
+   "ink": "#2e3129",
+   "style": {
+    "face": "serif"
+   }
   }
  ]
 }
