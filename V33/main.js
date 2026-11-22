@@ -147,7 +147,7 @@ const WALK = { perMetre: 700, min: 650, max: 6000 };
 const ORBIT = { az: 0.35, polarUp: 0.18, polarDown: 0.12, near: 0.85, far: 1.12 };
 const PORTRAIT_MAX = 1.9;
 const PORTRAIT_SHIFT = [0.05, 0.14];
-const PORTRAIT_VIEW = { disks: { shift: [0, -0.10] }, vitrine: { shift: [-0.05, 0.02], max: 1.4 }, c64: { shift: [-0.16, -0.22], max: 1.6 } };
+const PORTRAIT_VIEW = { disks: { shift: [0, -0.10], max: 1.45 }, vitrine: { shift: [-0.05, 0.02], max: 1.4 }, c64: { shift: [-0.16, -0.22], max: 1.6 } };
 const PORTRAIT_PAGE = { c64: { shift: [-0.18, -0.18], max: 1.0 } };
 const paged = (id) => window.__room?.layers?.[id]?.info?.().disk != null;
 const shift3 = (s) => [s?.[0] ?? 0, s?.[1] ?? 0, s?.[2] ?? PORTRAIT_MAX];

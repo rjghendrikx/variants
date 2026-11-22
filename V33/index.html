@@ -218,7 +218,7 @@
     color: var(--ink); background: rgba(20, 17, 15, .84); border: 1px solid rgba(227, 163, 91, .45); opacity: 0; pointer-events: none; transition: opacity .4s ease; }
   .nav-hint.on { opacity: 1; }
   .nav-hint:empty { display: none; }
-  @media (max-width: 640px) { .nav-hint { bottom: auto; top: 38%; border-radius: 12px; } }   
+  @media (max-width: 640px) { .nav-hint { bottom: auto; top: calc(max(10px, env(safe-area-inset-top, 0px)) + 4px); left: 12px; right: 12px; transform: none; border-radius: 12px; text-align: center; } }   
   @media (pointer: coarse) { .back { min-height: 44px; } .back .esc { display: none; } }
   @media (max-width: 640px) { .away .case { bottom: calc(max(18px, env(safe-area-inset-bottom, 0px)) + 56px); } }
   .gate .back, .gate .nav-hint, .gate .caption, .gate .views, .gate .sound, .gate .views-btn, .gate .prompt, .gate .case, .gate .work { display: none; }
