@@ -171,11 +171,6 @@
    },
    {
     "only": "cabinet",
-    "title": "A walking droplet",
-    "text": "A drop of silicone oil bounces on a bath of the same oil, shaken just too gently for the surface to break into waves by itself. Every bounce leaves a ripple that lasts a while. The drop lands on the slope of its own ripples and is pushed along: the wave steers the drop that makes it. Yves Couder and Emmanuel Fort found these walkers in Paris in 2005; John Bush’s group at MIT has studied them since as pilot-wave hydrodynamics. A walker does things that recall a quantum particle, such as settling into orbits of only certain sizes. Nobody has shown that this is how an electron works. What you see here is computed, not filmed, with the model of Oza, Rosales and Bush (2013). A magnet over the dish pulls the drop toward the middle, as in the trapped-walker experiment of Perrard, Labousse, Miskin, Fort and Couder (2014)."
-   },
-   {
-    "only": "cabinet",
     "title": "Pads and faders",
     "text": "What his hands are on when the visuals run."
    },
@@ -270,7 +265,7 @@
  "place_cards": {
   "table": "From here: the C64, Agents on the laptop, the hi-fi.",
   "desk": "From here: the C64 and its disks, the calculator, the PC, the laptop.",
-  "wall": "From here: the poster and the bench by the window."
+  "wall": "From here: the poster by the window."
  },
  "deck": {
   "title": "Night Shift (room loop)",
@@ -454,14 +449,6 @@
     "kicker": "Running",
     "title": "Rule 30, row by row",
     "body": "Rule 30, drawn as it is computed: each row from the row above, nothing else. One black cell to start, one row a step since you came in. No formula skips ahead: to see row n, the rows before it have to be drawn. The red lines mark the only past the newest middle cell can depend on."
-   }
-  ],
-  [
-   "pr_walker",
-   {
-    "kicker": "On the bench",
-    "title": "A walking droplet",
-    "body": "A drop of silicone oil bounces on a bath of the same oil, shaken just too gently for the surface to break into waves by itself. Every bounce leaves a ripple that lasts a while. The drop lands on the slope of its own ripples and is pushed along: the wave steers the drop that makes it. Yves Couder and Emmanuel Fort found these walkers in Paris in 2005; John Bush’s group at MIT has studied them since as pilot-wave hydrodynamics. A walker does things that recall a quantum particle, such as settling into orbits of only certain sizes. Nobody has shown that this is how an electron works. What you see here is computed, not filmed, with the model of Oza, Rosales and Bush (2013). A magnet over the dish pulls the drop toward the middle, as in the trapped-walker experiment of Perrard, Labousse, Miskin, Fort and Couder (2014)."
    }
   ],
   [
