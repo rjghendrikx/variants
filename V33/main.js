@@ -10,7 +10,7 @@ const params = new URLSearchParams(location.search);
 const GATE = params.has('gate');
 const GLASS = !params.has('noglass');
 const LIVE = !params.has('nolive');
-const LAYERS = ['layer-terminal.js', 'layer-projector.js', 'layer-chamber.js', 'layer-geiger.js', 'layer-eraser.js', 'layer-rain.js', 'layer-water.js', 'layer-audio.js', 'layer-hotspots.js', 'layer-tags.js', 'layer-walk.js', 'layer-lidar.js', 'layer-deck.js', 'layer-books.js', 'layer-stage.js', 'layer-c64.js', 'layer-tape.js', 'layer-intro.js', 'layer-gpu.js'];
+const LAYERS = ['layer-terminal.js', 'layer-projector.js', 'layer-chamber.js', 'layer-geiger.js', 'layer-eraser.js', 'layer-rain.js', 'layer-water.js', 'layer-audio.js', 'layer-hotspots.js', 'layer-tags.js', 'layer-walk.js', 'layer-lidar.js', 'layer-deck.js', 'layer-books.js', 'layer-stage.js', 'layer-c64.js', 'layer-hypercard.js', 'layer-tape.js', 'layer-intro.js', 'layer-gpu.js'];
 const POLARIZER = (L) => (L.eraser?.info().inBeam ? 'Take the polarizer out' : 'Insert the polarizer');
 const WORK = Object.fromEntries(Object.entries(C.work_room).map(([id, room]) => [id, { room, acts: [] }]));
 function workCase(id, { room, acts }, el = null) {
