@@ -52,6 +52,9 @@ const LIFT = 0.0012;
 const CAP = [0.018, 0.010, 0.011];
 const CANVAS = [512, 576];
 const DRAW_HZ = 15;
+const FILT_OPEN = [12, 22000];
+const FILT_ANGLE = 2.36;
+export const filterHz = (f) => [f > 0 ? FILT_OPEN[0] * (6000 / FILT_OPEN[0]) ** f : FILT_OPEN[0], f < 0 ? FILT_OPEN[1] * (180 / FILT_OPEN[1]) ** -f : FILT_OPEN[1]];
 
 const STYLE = `.deck-keys { position: fixed; left: 50%; transform: translateX(-50%); bottom: 64px; font: 12px/1.3 inherit; color: var(--muted, #b9ab98);
   background: rgba(20, 17, 15, .6); border-radius: 8px; padding: 6px 10px; pointer-events: none; transition: opacity .3s; }
@@ -85,8 +88,8 @@ export default function mount(live) {
   const box = (c, a, b, k) => {
     const h = ey.clone().multiplyScalar(CAP[2] / 2), cc = c.clone().add(h);
     quad(cc.clone().add(h), a, b, k);
-    quad(cc.clone().add(b), a, h, k); quad(cc.clone().sub(b), a, h, k);
-    quad(cc.clone().add(a), b, h, k); quad(cc.clone().sub(a), b, h, k);
+    quad(cc.clone().add(b), a, h, k, 0, 0, 0, 0); quad(cc.clone().sub(b), a, h, k, 0, 0, 0, 0);
+    quad(cc.clone().add(a), b, h, k, 0, 0, 0, 0); quad(cc.clone().sub(a), b, h, k, 0, 0, 0, 0);
   };
   const top = M.djm450_top_z;
   const chC = M.djm450_ch_centers.map((p) => wMx(p)), xfC = wMx(M.djm450_xf_center), lowC = M.djm450_low_knobs.map((p) => wMx(p));
@@ -94,6 +97,11 @@ export default function mount(live) {
   box(xfC, mxX.clone().multiplyScalar(CAP[1] / 2), mxZ.clone().multiplyScalar(CAP[0] / 2), 4);
   const kr = M.djm450_knob_r;
   lowC.forEach((c, i) => quad(c.clone().addScaledVector(ey, 0.0152), mxX.clone().multiplyScalar(kr * 1.3), mxZ.clone().multiplyScalar(kr * 1.3), 5 + i));
+  const fr = M.djm450_filter_r ?? kr, filtC = (M.djm450_filter_knobs ?? []).map((p) => wMx(p));
+  filtC.forEach((c, i) => quad(c.clone().addScaledVector(ey, 0.0141), mxX.clone().multiplyScalar(fr * 0.72), mxZ.clone().multiplyScalar(fr * 0.72), 7 + i));
+  const jc = D.xdj_jog_center, JD = 0.0228;
+  const jogC = D.xdj_deck_x.map((dx) => wDk([jc[0] + dx, jc[1] + 0.0009, jc[2]]));
+  jogC.forEach((c, i) => quad(c, ex.clone().multiplyScalar(JD), ez.clone().multiplyScalar(JD), 9 + i));
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
@@ -106,16 +114,23 @@ export default function mount(live) {
   tex.colorSpace = THREE.NoColorSpace;
   const U = { uTex: { value: tex }, uOff: { value: [0, 0, 0, 0, 0, 0, 0] }, uCh: { value: new THREE.Vector3() }, uXf: { value: new THREE.Vector3() },
     uChAxis: { value: mxZ.clone().multiplyScalar(-1) }, uXfAxis: { value: mxX.clone() }, uKr: { value: kr }, uLow: { value: new THREE.Vector2() },
-    uKnobX: { value: mxX.clone() }, uKnobZ: { value: mxZ.clone() }, uLit: { value: 0.75 } };
+    uKnobX: { value: mxX.clone() }, uKnobZ: { value: mxZ.clone() }, uLit: { value: 0.75 }, uFilt: { value: new THREE.Vector2() }, uJog: { value: new THREE.Vector2() } };
   const mat = new THREE.ShaderMaterial({ uniforms: U, side: THREE.DoubleSide, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
     vertexShader: `attribute float aKind; uniform float uOff[7]; uniform vec3 uChAxis, uXfAxis; varying vec2 vUv; varying float vK;
       void main() { vUv = uv; vK = aKind; vec3 p = position; int k = int(aKind + 0.5);
         if (k == 2 || k == 3) p += uChAxis * uOff[k]; if (k == 4) p += uXfAxis * uOff[4];
         gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0); }`,
-    fragmentShader: `uniform sampler2D uTex; uniform vec2 uLow; uniform float uLit; varying vec2 vUv; varying float vK;
+    fragmentShader: `uniform sampler2D uTex; uniform vec2 uLow, uFilt, uJog; uniform float uLit; varying vec2 vUv; varying float vK;
+      // a pale line from r0 to r1 (uv: 0.5 = the rim) at angle a, clockwise from the back (-v), 0 elsewhere
+      float hand(float a, float r0, float r1, float w) { vec2 p = vUv - 0.5, d = vec2(sin(a), -cos(a)); float t = dot(p, d);
+        return step(r0, t) * step(t, r1) * (1.0 - smoothstep(w * 0.6, w, abs(p.x * d.y - p.y * d.x))); }
       void main() { int k = int(vK + 0.5);
         if (k <= 1) { gl_FragColor = vec4(texture2D(uTex, vUv).rgb * uLit, 1.0); return; }
-        if (k <= 4) { float e = step(0.82, max(abs(vUv.x - 0.5), abs(vUv.y - 0.5)) * 2.0); gl_FragColor = vec4(mix(vec3(0.62, 0.6, 0.57), vec3(0.2), e) * uLit, 1.0); return; }
+        // v34 step 3: a long-throw cap, satin black with a pale line across its middle (the crossfader's runs along its travel's normal)
+        if (k <= 4) { float e = step(0.84, max(abs(vUv.x - 0.5), abs(vUv.y - 0.5)) * 2.0), l = 1.0 - smoothstep(0.05, 0.08, abs((k == 4 ? vUv.x : vUv.y) - 0.5));
+          gl_FragColor = vec4(mix(mix(vec3(0.11, 0.11, 0.115), vec3(0.04), e), vec3(0.58, 0.57, 0.55), l) * uLit, 1.0); return; }
+        if (k == 7 || k == 8) { float a = hand(k == 7 ? uFilt.x : uFilt.y, 0.08, 0.47, 0.05); gl_FragColor = vec4(vec3(0.82, 0.81, 0.78) * uLit, a); return; }
+        if (k >= 9) { float a = hand(k == 9 ? uJog.x : uJog.y, 0.27, 0.41, 0.05); gl_FragColor = vec4(vec3(1.0, 0.62, 0.3) * 0.55 * uLit, a); return; }
         // a low knob's mark: an amber ring at the knob's rim while it cuts
         float r = length(vUv - 0.5) * 2.0, on = k == 5 ? uLow.x : uLow.y;
         float ring = smoothstep(0.62, 0.7, r) * (1.0 - smoothstep(0.86, 0.94, r));
@@ -127,7 +142,8 @@ export default function mount(live) {
   scene.add(mesh);
 
   const reduce = () => live.reduceMotion.matches;
-  const S = { playing: false, t: 0, xf: 0.5, ch: [1, 1], low: [false, false], lowK: 1 };
+  const S = { playing: false, t: 0, xf: 0.5, ch: [1, 1], low: [false, false], lowK: 1, filt: [0, 0], jog: [0, 0] };
+  const JOG_REV = 1.8;
   let ctx = null, bus = null, anchor = 0, nextStep = 0, noise = null, drawT = 0, cost = 0, frames = 0;
   live.show = { get playing() { return S.playing; }, get beat() { return (S.t * BPM) / 60; }, get xf() { return S.xf; },
     get ch() { return S.ch; }, get low() { return S.lowK; }, stop: () => play(false) };
@@ -144,11 +160,13 @@ export default function mount(live) {
       if (!AC) return null;
       ctx = new AC({ latencyHint: 'playback' }); dest = ctx.destination; own = true;
     }
-    const out = ctx.createGain(), shelf = ctx.createBiquadFilter(), ch = ctx.createGain();
+    const out = ctx.createGain(), shelf = ctx.createBiquadFilter(), ch = ctx.createGain(), hp = ctx.createBiquadFilter(), lp = ctx.createBiquadFilter();
     shelf.type = 'lowshelf'; shelf.frequency.value = 220; shelf.gain.value = 0;
+    hp.type = 'highpass'; hp.frequency.value = FILT_OPEN[0]; hp.Q.value = 0.9;
+    lp.type = 'lowpass'; lp.frequency.value = FILT_OPEN[1]; lp.Q.value = 0.9;
     out.gain.value = 0;
-    ch.connect(shelf).connect(out).connect(dest);
-    bus = { out, shelf, ch };
+    ch.connect(shelf).connect(hp).connect(lp).connect(out).connect(dest);
+    bus = { out, shelf, ch, hp, lp };
     const n = ctx.sampleRate, buf = ctx.createBuffer(1, n, n), d = buf.getChannelData(0);
     let s = 22222; for (let i = 0; i < n; i++) { s = (s * 16807) % 2147483647; d[i] = (s / 2147483647) * 2 - 1; }
     noise = buf;
@@ -200,6 +218,9 @@ export default function mount(live) {
     const xf = S.xf <= 0.5 ? 1 : Math.cos((S.xf - 0.5) * Math.PI);
     bus.ch.gain.setTargetAtTime(S.ch[0] ** 2 * xf, t, 0.03);
     bus.shelf.gain.setTargetAtTime(S.lowK < 0.5 ? -30 : 0, t, 0.03);
+    const [fhp, flp] = filterHz(S.filt[0]);
+    bus.hp.frequency.setTargetAtTime(fhp, t, 0.02);
+    bus.lp.frequency.setTargetAtTime(flp, t, 0.02);
   }
   function schedule() {
     if (!ctx || ctx.state !== 'running') return;
@@ -260,6 +281,8 @@ export default function mount(live) {
     U.uOff.value[3] = (S.ch[1] - 0.5) * M.djm450_ch_len;
     U.uOff.value[4] = (S.xf - 0.5) * M.djm450_xf_len;
     U.uLow.value.set(S.low[0] ? 1 : 0, S.low[1] ? 1 : 0);
+    U.uFilt.value.set(S.filt[0] * FILT_ANGLE, S.filt[1] * FILT_ANGLE);
+    U.uJog.value.set(S.jog[0] + (S.t / JOG_REV) * 2 * Math.PI, S.jog[1]);
   }
   draw(); controls();
 
@@ -275,6 +298,7 @@ export default function mount(live) {
     if (k === 'xf') S.xf = Math.min(1, Math.max(0, v));
     else if (k === 'ch1' || k === 'ch2') S.ch[k === 'ch1' ? 0 : 1] = Math.min(1, Math.max(0, v));
     else if (k === 'low') { S.low = [!!v, !!v]; }
+    else if (k === 'f1' || k === 'f2') S.filt[k === 'f1' ? 0 : 1] = Math.min(1, Math.max(-1, Math.abs(v) < 0.04 ? 0 : v));
     S.lowK = S.low[0] || S.low[1] ? 0 : 1;
     controls(); mixAudio(); live.render();
   }
@@ -305,6 +329,62 @@ export default function mount(live) {
       else if (ev.code === 'BracketRight') set('xf', S.xf + 0.1); else if (ev.code === 'KeyL') set('low', !(S.low[0] || S.low[1]));
     });
   }
+  const JOG_S = 0.12;
+  const targets = () => [
+    ...filtC.map((c, i) => ({ kind: 'f', i, c, r: fr * 1.35 })),
+    ...jogC.map((c, i) => ({ kind: 'jog', i, c, r: D.xdj_jog_r })),
+  ];
+  function grabAt(cx, cy) {
+    if (live.view() !== 'decks' || live.moving?.()) return null;
+    const r = live.renderer.domElement.getBoundingClientRect();
+    const px = (p) => { const q = p.clone().project(camera); return [r.left + ((q.x + 1) / 2) * r.width, r.top + ((1 - q.y) / 2) * r.height]; };
+    for (const t of targets()) {
+      const [x, y] = px(t.c), [x1, y1] = px(t.c.clone().addScaledVector(ex, t.r));
+      if (Math.hypot(cx - x, cy - y) < Math.hypot(x1 - x, y1 - y)) return { ...t, x, y };
+    }
+    return null;
+  }
+  function turn(g, d) {
+    if (g.kind === 'f') { set(`f${g.i + 1}`, S.filt[g.i] + d); return; }
+    S.jog[g.i] += d;
+    if (g.i === 0 && S.playing) {
+      S.t = Math.min(LENGTH - 0.1, Math.max(0, S.t + d * JOG_S));
+      if (ctx && bus?.live) anchor = ctx.currentTime - S.t;
+    }
+    controls(); live.render();
+  }
+  if (!live.gate) {
+    const canvas_ = live.renderer.domElement;
+    let held = null;
+    addEventListener('pointerdown', (ev) => {
+      if (ev.pointerType !== 'mouse' || ev.button !== 0 || ev.target !== canvas_) return;
+      const g = grabAt(ev.clientX, ev.clientY);
+      if (!g) return;
+      ev.stopImmediatePropagation(); ev.preventDefault();
+      held = { ...g, id: ev.pointerId, lastY: ev.clientY, lastA: Math.atan2(ev.clientX - g.x, g.y - ev.clientY) };
+      canvas_.style.cursor = g.kind === 'f' ? 'ns-resize' : 'grabbing';
+    }, true);
+    addEventListener('pointermove', (ev) => {
+      if (!held || ev.pointerId !== held.id) return;
+      ev.stopImmediatePropagation();
+      if (held.kind === 'f') { turn(held, (held.lastY - ev.clientY) / 160); held.lastY = ev.clientY; return; }
+      const a = Math.atan2(ev.clientX - held.x, held.y - ev.clientY);
+      let d = a - held.lastA;
+      d -= Math.round(d / (2 * Math.PI)) * 2 * Math.PI;
+      held.lastA = a;
+      turn(held, d);
+    }, true);
+    const drop = (ev) => { if (!held || ev.pointerId !== held.id) return; ev.stopImmediatePropagation(); held = null; canvas_.style.cursor = ''; };
+    addEventListener('pointerup', drop, true);
+    addEventListener('pointercancel', drop, true);
+    addEventListener('wheel', (ev) => {
+      if (ev.target !== canvas_) return;
+      const g = grabAt(ev.clientX, ev.clientY);
+      if (!g) return;
+      ev.stopImmediatePropagation(); ev.preventDefault();
+      turn(g, g.kind === 'f' ? -Math.sign(ev.deltaY) * 0.08 : -Math.sign(ev.deltaY) * 0.25);
+    }, { capture: true, passive: false });
+  }
   if (params.has('deck') && !live.gate) play(true);
   live.deckStep = (h) => { if (S.playing) timed(h); };
 
@@ -315,6 +395,7 @@ export default function mount(live) {
     else S.t += dt;
     if (S.t >= LENGTH) { S.t = LENGTH; play(false); S.t = 0; draw(); return true; }
     schedule();
+    U.uJog.value.x = S.jog[0] + (S.t / JOG_REV) * 2 * Math.PI;
     drawT += dt;
     if (drawT >= 1 / DRAW_HZ && (!reduce() || drawT >= 1)) { drawT = 0; draw(); }
     return true;
@@ -345,9 +426,10 @@ export default function mount(live) {
         const q = p.project(camera), r = live.renderer.domElement.getBoundingClientRect();
         return q.z > 1 ? null : [r.left + ((q.x + 1) / 2) * r.width, r.top + ((1 - q.y) / 2) * r.height];
       },
+      grabAt: (x, y) => { const g = grabAt(x, y); return g && { kind: g.kind, i: g.i, x: g.x, y: g.y }; },
       cost() { const r = { ms: frames ? +(cost / frames).toFixed(4) : 0, frames }; cost = 0; frames = 0; return r; },
       info: () => ({ playing: S.playing, t: +S.t.toFixed(2), beat: +((S.t * BPM) / 60).toFixed(2), bpm: BPM, length: +LENGTH.toFixed(1), title, artist,
-        xf: S.xf, ch: [...S.ch], low: S.lowK < 0.5, audio: ctx?.state ?? 'none', sounding: !!bus?.live && ctx?.state === 'running' }),
+        xf: S.xf, ch: [...S.ch], low: S.lowK < 0.5, filter: [...S.filt], filterHz: bus ? [bus.hp.frequency.value, bus.lp.frequency.value] : null, audio: ctx?.state ?? 'none', sounding: !!bus?.live && ctx?.state === 'running' }),
     },
   };
 }

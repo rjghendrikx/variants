@@ -189,6 +189,7 @@ export default function mount(live) {
   const edged = new Set();
   const areas = { key: '', v: {} };
   const edges = () => edgesFor(null);
+  let laidAt = -1, homeAt = 0;
   function edgesFor(only) {
     hideAll();
     if ((only ? !live.inRoom?.() : live.view() !== home) || live.moving?.() || live.root.dataset.intro === 'playing') return;
@@ -219,6 +220,7 @@ export default function mount(live) {
       done.push(place(t, e, done));
       edged.add(t.id);
     }
+    if (!only) laidAt = performance.now();
   }
 
   const inReach = () => WORK_VIEWS.filter((id) => (byView.get(id) ?? []).some(({ box }) => reach(box)));
@@ -236,7 +238,7 @@ export default function mount(live) {
     name: 'tags',
     update: () => false,
     onView(id) {
-      if (id === home) requestAnimationFrame(edges);
+      if (id === home) { homeAt = performance.now(); requestAnimationFrame(edges); }
       else {
         hideAll();
         if (live.inRoom?.() && coarse.matches) requestAnimationFrame(() => { if (!inReach().length) edgesFor(WORK_VIEWS); });
@@ -244,6 +246,7 @@ export default function mount(live) {
     },
     api: {
       edges,
+      laid: () => laidAt >= homeAt,
       shown: () => [...cues.values()].filter((t) => t.on).map((t) => ({ view: t.id, why: 'edge', box: (({ left, top, right, bottom }) => [left, top, right, bottom])(t.el.getBoundingClientRect()) })),
     },
   };

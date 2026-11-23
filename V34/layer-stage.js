@@ -1,5 +1,6 @@
-import { noPick } from './layer-common.js';
-import { BARS, BPM, features } from './layer-deck.js';
+import { noPick, seedFrom } from './layer-common.js';
+import { BARS, BPM, SECTIONS, features } from './layer-deck.js';
+import { makeFacade } from './facade-life.js';
 
 const T_IN = 3.0, T_OUT = 2.5;
 const T_STILL = 6.0;
@@ -119,6 +120,17 @@ export default function mount(live) {
   const NBX = Math.ceil(NC / BLOCK[0]);
   const blockOf = Int32Array.from({ length: NCELL }, (_, k) => Math.floor((k % NC) / BLOCK[0]) + Math.floor(Math.floor(k / NC) / BLOCK[1]) * NBX);
   const NBLK = NBX * Math.ceil(NF / BLOCK[1]);
+  const classic = params.has('classic');
+  const life = classic ? null : makeFacade({ W: NC, H: NF, seed: seedFrom(params, 606), bpm: BPM, sections: SECTIONS });
+  const houseBias = life ? Float32Array.from({ length: BARS * 4 + 64 }, (_, i) => life.houseBias(i)) : null;
+  let stillF = null, gOs = 1, inView = true;
+  const sphere = new THREE.Sphere().setFromPoints(offices.map((i) => panels[i].pos));
+  const frustum = new THREE.Frustum(), pv = new THREE.Matrix4();
+  function facadeInView() {
+    camera.updateMatrixWorld();
+    pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    return frustum.setFromProjectionMatrix(pv).intersectsSphere(sphere);
+  }
 
   const F = new Float32Array(NCELL);
   const put = (k, v) => { if (v > F[k]) F[k] = v; };
@@ -188,6 +200,7 @@ export default function mount(live) {
   function houseLevel(p, B, f) {
     const ph = Math.floor(B / H_PHRASE + p.u);
     let r = hash(ph, 31 + 997 * p.u), lv = HOUSE_STATES[HOUSE_STATES.length - 1][0];
+    if (houseBias) r = clamp(r + houseBias[clamp(Math.floor((ph - p.u) * H_PHRASE), 0, houseBias.length - 1)], 0, 0.999);
     for (const [l, share] of HOUSE_STATES) { if (r < share) { lv = l; break; } r -= share; }
     return lv * (0.75 + 0.25 * f.fade);
   }
@@ -295,19 +308,30 @@ export default function mount(live) {
     if (k === 0) { if (!want) settled = true; return was; }
     if (still && k === k0 && was) return false;
     U.uK.value = k * k * (3 - 2 * k);
+    if (life && !want && !still && was) return true;
     const mix = playing ? { xf: deck().xf, ch: deck().ch, low: deck().low } : { xf: 0.5, ch: [1, 1], low: 1 };
     const B = still ? 4 * 40 + 1.5 : playing ? deck().beat : b;
     const f = features(B, mix.low);
     lastF = f;
     smoothE.e = still ? f.energy : smoothE.e + (f.energy - smoothE.e) * (1 - Math.exp(-dt / 0.4));
-    program(B, (B * 60) / BPM, f, mix);
+    if (!life) program(B, (B * 60) / BPM, f, mix);
     rampO = setRamp('uO', OFFICE_RAMP[f.kind], rampO);
     rampH = setRamp('uH', HOUSE_RAMP[f.kind], rampH);
     const gO = mix.ch[0] * Math.min(1, 2 * (1 - mix.xf)), gH = uniOnly ? 0 : mix.ch[1] * Math.min(1, 2 * mix.xf);
     const scaleO = 0.8 + 0.2 * smoothE.e;
     const arr = level.array, ka = still ? 1 : 1 - Math.exp(-dt / TAU_UP), kd = still ? 1 : 1 - Math.exp(-dt / TAU_DOWN);
     prev.set(arr);
-    for (const i of offices) {
+    if (life && still) {
+      stillF = stillF || life.still();
+      for (const i of offices) arr[i] = gO * (0.03 + 0.97 * stillF[cellOf[i]]);
+    } else if (life) {
+      inView = facadeInView();
+      gOs += (gO - gOs) * ka;
+      if (inView && want) {
+        const L = life.frame(dt, B, mix.low);
+        for (const i of offices) arr[i] = gOs * (0.03 + 0.97 * Math.min(1, L[cellOf[i]] * scaleO));
+      } else life.jump();
+    } else for (const i of offices) {
       const target = gO * (0.03 + 0.97 * Math.min(1, F[cellOf[i]] * scaleO));
       const cur = arr[i];
       arr[i] = cur + (target - cur) * (target > cur ? ka : kd);
@@ -317,7 +341,8 @@ export default function mount(live) {
       const cur = arr[i];
       arr[i] = still ? target : cur + (target - cur) * (target > cur ? ka * 0.5 : kd * 0.4);
     }
-    if (!still) { govern(offices, 0, clock); govern(houses, 1, clock); hist[histI].set(arr); histI = (histI + 1) % GOVERN.back; }
+    if (!still) { if (!life) govern(offices, 0, clock); govern(houses, 1, clock);
+      hist[histI].set(arr); histI = (histI + 1) % GOVERN.back; }
     level.needsUpdate = true;
     return true;
   }
@@ -338,6 +363,10 @@ export default function mount(live) {
         return [r.left + (q.x + 1) / 2 * r.width, r.top + (1 - q.y) / 2 * r.height];
       },
       values: () => Array.from(level.array, (v) => +v.toFixed(4)),
+      aim(fov = 50, out = 0.6) { if (!live.gate) return false;
+        const eye = winC.clone().addScaledVector(outward, out), c = new THREE.Vector3(); let n = 0;
+        for (const i of offices) { const d = panels[i].pos.clone().sub(eye); if (d.normalize().dot(outward) > Math.cos(0.87)) { c.add(panels[i].pos); n++; } }
+        camera.position.copy(eye); camera.lookAt(n ? c.divideScalar(n) : sphere.center); camera.fov = fov; camera.updateProjectionMatrix(); live.render(); return n; },
       houseColours: () => { const out = []; for (const name of new Set(Object.values(HOUSE_RAMP))) for (const [, c] of RAMPS[name]) for (const i of houses) {
         const t = [tone[4 * i], tone[4 * i + 1], tone[4 * i + 2]]; out.push(c.map((v, j) => v * (0.65 + 0.35 * t[j]))); } return out; },
       kinds: () => panels.map((p) => p.kind),
@@ -346,7 +375,8 @@ export default function mount(live) {
       info: () => ({ on: forced || !!deck()?.playing, near, forced, uniOnly, deck: !!deck()?.playing, k: +k.toFixed(3), beat: +(deck()?.playing ? deck().beat : b).toFixed(2),
         visible: mesh.visible, settled, seen, panels: N, university: offices.length, houses: houses.length, cols: NC, floors: NF,
         pattern: lastF ? `${lastF.kind} ${lastF.secBeat.toFixed(1)}/${lastF.secLen}` : 'none', ramps: [rampO, rampH],
-        held: [gov[0].held, gov[1].held] }),
+        held: [gov[0].held, gov[1].held], mode: life ? 'life' : 'classic', inView,
+        life: life ? { ...life.stats, E: +life.stats.E.toFixed(3), hum: +life.stats.hum.toFixed(4), mean: +life.stats.mean.toFixed(4) } : null }),
     },
   };
 }
