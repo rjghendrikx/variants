@@ -564,6 +564,8 @@
   {
    "slug": "uva-bsc",
    "name": "UVA.PHYS+PHIL",
+   "label": "UvA · BSc '07-'11",
+   "detail": "bèta-gamma · physics · philosophy",
    "stripe": "#4a3fd0",
    "page": [
     [
@@ -580,6 +582,8 @@
   {
    "slug": "uva-msc",
    "name": "UVA.MSC.PHYSICS",
+   "label": "UvA · MSc '12-'14",
+   "detail": "physics · advanced matter and energy",
    "stripe": "#d77a7a",
    "page": [
     [
@@ -593,6 +597,8 @@
   {
    "slug": "amolf",
    "name": "AMOLF.OPTOMECH",
+   "label": "AMOLF '13-'14",
+   "detail": "optomechanics · PRL 115, 203904",
    "stripe": "#d8d050",
    "page": [
     [
@@ -621,6 +627,8 @@
   {
    "slug": "vu",
    "name": "VU.2DES",
+   "label": "VU · LASERLAB '14-'16",
+   "detail": "2D electronic spectroscopy · Sci. Rep. 6 · JACS",
    "stripe": "#b0372c",
    "page": [
     [
@@ -655,6 +663,8 @@
   {
    "slug": "pggm",
    "name": "PGGM.DATASCI",
+   "label": "PGGM '16-'17",
+   "detail": "one of its first data-science teams",
    "stripe": "#7a4f22",
    "page": [
     [
@@ -673,6 +683,8 @@
   {
    "slug": "wartsila",
    "name": "WARTSILA.ML",
+   "label": "WÄRTSILÄ '18",
+   "detail": "market prediction · PoC to package",
    "stripe": "#4a3fd0",
    "page": [
     [
@@ -690,6 +702,8 @@
   {
    "slug": "tele2",
    "name": "TELE2.VOICE",
+   "label": "TELE2 '18-'19",
+   "detail": "4G voice quality",
    "stripe": "#9a3fb0",
    "page": [
     [
@@ -707,6 +721,8 @@
   {
    "slug": "ing",
    "name": "ING.COLLECTIONS",
+   "label": "ING '19-'21",
+   "detail": "chapter lead data science · collections",
    "stripe": "#e07a1f",
    "page": [
     [
@@ -725,6 +741,8 @@
   {
    "slug": "schiphol-sim",
    "name": "SCHIPHOL.SIM",
+   "label": "SCHIPHOL '21-'23",
+   "detail": "passenger flow · runway capacity",
    "stripe": "#6fa8dc",
    "page": [
     [
@@ -746,6 +764,8 @@
   {
    "slug": "steel",
    "name": "STEEL.TWIN",
+   "label": "DANIELI CORUS '23",
+   "detail": "steel-plant digital twin",
    "stripe": "#8a8a8a",
    "page": [
     [
@@ -765,6 +785,8 @@
   {
    "slug": "eneco",
    "name": "ENECO.SQUAD",
+   "label": "ENECO '23-'25",
+   "detail": "first data-science squad · topic modelling",
    "stripe": "#3c9a3c",
    "page": [
     [
@@ -784,6 +806,8 @@
   {
    "slug": "schiphol-llm",
    "name": "SCHIPHOL.LLM",
+   "label": "SCHIPHOL '25",
+   "detail": "CX assistants · hybrid RAG · agentic tool use",
    "stripe": "#3fc0c8",
    "page": [
     [
@@ -807,21 +831,24 @@
  "case_disks": [
   {
    "slug": "simulations",
-   "stripe": "orange",
+   "shell": "#2f4f86",
+   "accent": "#c8553d",
    "name": "SIMULATIONS",
-   "line": "SCHIPHOL '21-'23 · DANIELI CORUS '23"
+   "line": "physics-based models of real systems"
   },
   {
    "slug": "agents",
-   "stripe": "red",
+   "shell": "#26272b",
+   "accent": "#3f8f8a",
    "name": "AGENTS",
-   "line": "SCHIPHOL '25 · LLM ASSISTANTS"
+   "line": "tool-using LLM systems"
   },
   {
    "slug": "ml",
-   "stripe": "purple",
+   "shell": "#a9a7a0",
+   "accent": "#7a5aa6",
    "name": "MACHINE LEARNING",
-   "line": "ING '19-'21 · WÄRTSILÄ '18 · PGGM '16-'17"
+   "line": "models that learn from data"
   }
  ],
  "books": [

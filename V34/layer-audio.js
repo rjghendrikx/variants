@@ -6,12 +6,13 @@ const FADE_IN = 0.9, FADE_OUT = 0.35;
 const GLASS = 0.35;
 const DUCK = 0.6;
 const AMB = {
-  level: 0.30,
-  width: 0.25,
-  hiss: { level: 0.55, rate: 1800, noise: 0.22, hp: 300, peak: 2600, lp: 6500, am: 0.18, amHz: 18 },
-  ticks: { level: 0.32, rate: 7 },
-  drops: { level: 0.5, rate: 1.4, sill: 0.3 },
-  trickle: { level: 0.16, pan: 0.45, lp: 2600, drip: 1.25 },
+  level: 0.55,
+  width: 0.08,
+  hiss: { level: 0.55, rate: 1800, noise: 0.22, tilt: 2200, hp: 320, dip: 3300, lp: 5000, am: 0.12, amHz: 18 },
+  patter: { rate: 260, level: 0.4, lp: 700 },
+  ticks: { level: 0.17, rate: 8 },
+  drops: { level: 0.3, rate: 1.0, sill: 0.4 },
+  trickle: { level: 0.12, pan: 0.45, lp: 1800, drip: 3.2 },
   city: { level: 0.05, hp: 70, lp: 420 },
   pan: 0.35,
 };
@@ -22,20 +23,23 @@ const C_SOUND = 343;
 const TAU = 2 * Math.PI;
 function waveOf(sr, sec, fn) { const n = Math.max(1, Math.ceil(sr * sec)), w = new Float32Array(n); for (let i = 0; i < n; i++) w[i] = fn(i / sr, i); return w; }
 function glassDrop(sr, rand) {
-  const f = 2200 + rand() * 3800, tau = 0.0015 + rand() * 0.0045, tc = 0.0002 + rand() * 0.0004, ph = rand() * TAU;
-  return waveOf(sr, tau * 7, (t) => (rand() * 2 - 1) * 0.7 * Math.exp(-t / tc)
-    + Math.exp(-t / tau) * (Math.sin(TAU * f * t + ph) * 0.55 + Math.sin(TAU * f * 2.31 * t) * 0.2 * Math.exp(-t / tau)));
+  const f = 1100 + rand() * 1900, tau = 0.002 + rand() * 0.005, tc = 0.0006 + rand() * 0.0008, ta = 0.0003 + rand() * 0.0005, ph = rand() * TAU;
+  let lp = 0;
+  return waveOf(sr, tau * 5, (t) => { lp += 0.25 * ((rand() * 2 - 1) - lp);
+    return (1 - Math.exp(-t / ta)) * (lp * 0.9 * Math.exp(-t / tc)
+      + Math.exp(-t / tau) * (Math.sin(TAU * f * t + ph) * 0.5 + Math.sin(TAU * f * 2.31 * t) * 0.12 * Math.exp(-t / tau))); });
 }
 function sillDrop(sr, rand) {
-  const f = 520 + rand() * 900, tau = 0.006 + rand() * 0.014, tc = 0.0006 + rand() * 0.0008;
+  const f = 300 + rand() * 500, tau = 0.008 + rand() * 0.016, tc = 0.001 + rand() * 0.001, ta = 0.0008 + rand() * 0.0008;
   let ph = 0, lp = 0;
-  return waveOf(sr, tau * 6, (t) => { ph += TAU * f * (1 - 0.15 * Math.min(1, t / tau / 3)) / sr; lp += 0.3 * ((rand() * 2 - 1) - lp);
-    return lp * 1.2 * Math.exp(-t / tc) + Math.sin(ph) * 0.7 * Math.exp(-t / tau); });
+  return waveOf(sr, tau * 6, (t) => { ph += TAU * f * (1 - 0.15 * Math.min(1, t / tau / 3)) / sr; lp += 0.12 * ((rand() * 2 - 1) - lp);
+    return (1 - Math.exp(-t / ta)) * (lp * 1.6 * Math.exp(-t / tc) + Math.sin(ph) * 0.7 * Math.exp(-t / tau)); });
 }
 function plink(sr, rand, f0 = 900 + rand() * 1500, tau = 0.01 + rand() * 0.03) {
   let ph = 0, e = 1;
   const k = Math.exp(-1 / (tau * sr));
-  return waveOf(sr, tau * 6, (t, i) => { ph += TAU * f0 * (1 + 0.9 * t / (tau * 6)) / sr; e *= k; return Math.sin(ph) * e * Math.min(1, i / 8); });
+  const ra = Math.max(8, Math.round(sr * 0.0015));
+  return waveOf(sr, tau * 6, (t, i) => { ph += TAU * f0 * (1 + 0.9 * t / (tau * 6)) / sr; e *= k; return Math.sin(ph) * e * Math.min(1, i / ra); });
 }
 function texture(ctx, sec, fill) {
   const sr = ctx.sampleRate, n = Math.floor(sr * sec), buf = ctx.createBuffer(2, n, sr);
@@ -56,21 +60,37 @@ export function ambience(ctx, out, rand, job = (f) => f()) {
   const sum = gain(1), pan = ctx.createStereoPanner(), level = gain(A.level), duck = gain(1);
   sum.connect(pan).connect(level).connect(duck).connect(out);
 
-  const H = A.hiss;
+  const H = A.hiss, Pt = A.patter;
+  const onePoleWrap = (ch, n, fc) => { const k = 1 - Math.exp(-TAU * fc / sr); let y = 0;
+    for (let i = 0; i < n; i++) y += k * (ch[i] - y);
+    for (let i = 0; i < n; i++) { y += k * (ch[i] - y); ch[i] = y; } };
+  const NT = 8192, nt = Float32Array.from({ length: NT }, () => rand() * 2 - 1);
   const micro = (L, R, n) => {
+    const tmp = new Float32Array(n);
     for (const ch of [L, R]) {
       for (let i = 0; i < n; i++) ch[i] = (rand() * 2 - 1) * H.noise;
       poisson(rand, n / sr, H.rate, (t) => {
-        const tc = 0.00005 + rand() * 0.00035, a = rand() ** 3 * 1.6, at = Math.floor(t * sr), m = Math.ceil(tc * 5 * sr);
+        const tc = 0.00005 + rand() * 0.00035, a = rand() ** 3 * 1.6, at = Math.floor(t * sr), m = Math.ceil(tc * 4 * sr);
         const k = Math.exp(-1 / (tc * sr));
-        for (let i = 0, e = a; i < m; i++, e *= k) ch[(at + i) % n] += (rand() * 2 - 1) * e;
+        const o = Math.floor(rand() * (NT - m));
+        for (let i = 0, e = a; i < m; i++, e *= k) ch[(at + i) % n] += nt[o + i] * e;
       });
+      tmp.fill(0);
+      poisson(rand, n / sr, Pt.rate, (t) => {
+        const tc = 0.0008 + rand() * 0.0017, a = (0.5 + 0.5 * rand() ** 2) * Pt.level, at = Math.floor(t * sr), m = Math.ceil(tc * 3 * sr);
+        const k = Math.exp(-1 / (tc * sr)), ra = Math.ceil(sr * 0.0004);
+        const o = Math.floor(rand() * (NT - m));
+        for (let i = 0, e = a; i < m; i++, e *= k) tmp[(at + i) % n] += nt[o + i] * (i < ra ? e * i / ra : e);
+      });
+      onePoleWrap(tmp, n, Pt.lp);
+      for (let i = 0; i < n; i++) ch[i] += tmp[i];
+      onePoleWrap(ch, n, H.tilt);
     }
     for (let i = 0; i < n; i++) { const l = L[i], r = R[i]; L[i] = l + A.width * r; R[i] = r + A.width * l; }
   };
   const hissIn = gain(1), hissAm = gain(1);
   for (const [sec, rate] of [[11.3, 1], [13.9, 0.985]]) job(() => loop(texture(ctx, sec, micro), hissIn, rate));
-  hissIn.connect(filt('highpass', H.hp)).connect(filt('highpass', H.hp)).connect(filt('peaking', H.peak, 0.7, 2))
+  hissIn.connect(filt('highpass', H.hp)).connect(filt('peaking', H.dip, 0.9, -4))
     .connect(filt('lowpass', H.lp)).connect(hissAm).connect(gain(H.level)).connect(sum);
   const amDepth = gain(H.am);
   amDepth.connect(hissAm.gain);
@@ -79,14 +99,14 @@ export function ambience(ctx, out, rand, job = (f) => f()) {
     for (let i = 0; i < am.length; i++) am[i] /= pk || 1;
     loop(amBuf, amDepth); });
   const T = A.ticks;
-  const tickTex = (L, R, n) => poisson(rand, n / sr, T.rate, (t) => put(L, R, n, Math.floor(t * sr), glassDrop(sr, rand), 0.15 + rand() ** 2.5 * 0.85, (rand() * 2 - 1) * 0.8));
+  const tickTex = (L, R, n) => poisson(rand, n / sr, T.rate, (t) => put(L, R, n, Math.floor(t * sr), glassDrop(sr, rand), 0.25 + rand() ** 2 * 0.5, (rand() * 2 - 1) * 0.9));
   const tickIn = gain(T.level);
   tickIn.connect(sum);
   for (const sec of [17.3, 19.1]) job(() => loop(texture(ctx, sec, tickTex), tickIn));
   const D = A.drops, one = (w) => { const b = ctx.createBuffer(1, w.length, sr); b.copyToChannel(w, 0); return b; };
   let glass = [], sill = [], drips = [];
   job(() => { glass = Array.from({ length: 16 }, () => one(glassDrop(sr, rand))); sill = Array.from({ length: 8 }, () => one(sillDrop(sr, rand)));
-    drips = Array.from({ length: 8 }, () => one(plink(sr, rand, 1100 + rand() * 900, 0.02 + rand() * 0.025))); });
+    drips = Array.from({ length: 8 }, () => one(plink(sr, rand, 650 + rand() * 600, 0.03 + rand() * 0.025))); });
   const dropBus = gain(D.level);
   dropBus.connect(sum);
   const strips = Array.from({ length: 8 }, () => { const gn = gain(0), p = ctx.createStereoPanner(); gn.connect(p).connect(dropBus); return { gn, p }; });
@@ -116,19 +136,19 @@ export function ambience(ctx, out, rand, job = (f) => f()) {
       const s = ctx.createBufferSource(), st = strips[strip++ % strips.length], onSill = rand() < D.sill;
       s.buffer = onSill ? sill[Math.floor(rand() * sill.length)] : glass[Math.floor(rand() * glass.length)];
       s.playbackRate.value = 0.85 + rand() * 0.3;
-      st.gn.gain.setValueAtTime((onSill ? 0.5 : 0.3) + rand() ** 2 * 0.7, nextDrop);
-      st.p.pan.setValueAtTime((rand() * 2 - 1) * (onSill ? 0.4 : 0.8), nextDrop);
+      st.gn.gain.setValueAtTime((onSill ? 0.45 : 0.3) + rand() ** 2 * 0.3, nextDrop);
+      st.p.pan.setValueAtTime((rand() * 2 - 1) * (onSill ? 0.5 : 0.9), nextDrop);
       s.connect(st.gn); s.start(nextDrop);
       nextDrop += expWait(rand, D.rate * intensity);
     }
-    if (nextDrip < t0) nextDrip = t0 + C.drip * (0.6 + rand() * 0.8);
+    if (nextDrip < t0) nextDrip = t0 + C.drip * (0.5 + rand());
     while (nextDrip < t1) {
       const s = ctx.createBufferSource();
       s.buffer = drips[Math.floor(rand() * drips.length)];
       s.playbackRate.value = 0.9 + rand() * 0.2;
-      dripStrip.gain.setValueAtTime(0.6 + rand() * 0.6, nextDrip);
+      dripStrip.gain.setValueAtTime(0.4 + rand() * 0.3, nextDrip);
       s.connect(dripStrip); s.start(nextDrip);
-      nextDrip += C.drip * (0.6 + rand() * 0.8);
+      nextDrip += C.drip * (0.5 + rand());
     }
   }
   return {

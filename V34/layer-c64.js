@@ -1,5 +1,6 @@
 import { inView, noPick, rng, seedFrom } from './layer-common.js';
 import { DISKS, CV, bySlug, byName as diskNamed, number, screenRows, cardText } from './c64-disks.js';
+import { FACES } from './content.js';
 
 const COLS = 40, ROWS = 25;
 const BORDER = [32, 44];
@@ -568,7 +569,7 @@ export default function mount(live) {
 
   const SEQ = { type: [0.10, 0.85], seated: 0.95, search: 1.25, steady: 1.6, loading: 2.45, ready: 2.95, run: [3.0, 3.12],
     clear: 3.3, row: 0.06, leave: 1.3 };
-  const FLY = { arc: 0.70, slide: 0.25, lift: 0.05, over: 0.10, hover: 0.012 };
+  const FLY = { arc: 0.70, slide: 0.25, lift: 0.032, over: 0.10, hover: 0.032, out: 0.003 };
   const box = byName('pr_floppybox'), drv = byName('pr_1541');
   const bx = box?.userData ?? {}, dx = drv?.userData ?? {};
   const slabs = drive && box && bx.floppybox_pitch != null;
@@ -593,27 +594,43 @@ export default function mount(live) {
     return best;
   }
   let disk = null, diskCanvas = null;
+  const BOXLAB = { stripe: 0.040, x: 0.064, nameTop: 0.14, nameCap: 0.40, detailTop: 0.63, detailCap: 0.16, right: 0.135 };
   function diskMesh(d) {
+    const N = 1024;
     if (!disk) {
-      diskCanvas = Object.assign(document.createElement('canvas'), { width: 256, height: 256 });
-      const t = new THREE.CanvasTexture(diskCanvas); t.colorSpace = THREE.SRGBColorSpace;
-      disk = noPick(new THREE.Mesh(new THREE.BoxGeometry(SZ, TH, SZ), new THREE.MeshBasicMaterial({ map: t, color: new THREE.Color(0.55, 0.55, 0.55) })));
+      diskCanvas = Object.assign(document.createElement('canvas'), { width: N, height: N });
+      const t = new THREE.CanvasTexture(diskCanvas); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+      disk = noPick(new THREE.Mesh(new THREE.BoxGeometry(SZ, TH, SZ), new THREE.MeshBasicMaterial({ map: t, color: new THREE.Color(0.8, 0.8, 0.8) })));
       disk.name = 'c64_disk';
     }
-    const x = diskCanvas.getContext('2d');
-    x.fillStyle = '#121214'; x.fillRect(0, 0, 256, 256);
-    x.fillStyle = '#2a2a2e'; x.beginPath(); x.arc(128, 150, 30, 0, 7); x.fill();
-    x.fillStyle = '#050505'; x.beginPath(); x.arc(128, 150, 14, 0, 7); x.fill(); x.fillRect(118, 196, 20, 52);
-    x.fillStyle = '#ece6d2'; x.fillRect(14, 10, 228, 40);
-    x.fillStyle = d.stripe; x.fillRect(14, 10, 14, 40);
-    x.fillStyle = '#1b1b4a'; x.font = 'bold 20px ui-monospace, monospace'; x.textBaseline = 'middle';
-    x.fillText(d.name, 36, 31, 200);
+    const x = diskCanvas.getContext('2d'), k = N / SZ;
+    x.fillStyle = '#121214'; x.fillRect(0, 0, N, N);
+    x.fillStyle = '#2a2a2e'; x.beginPath(); x.arc(N / 2, N * 0.59, N * 0.12, 0, 7); x.fill();
+    x.fillStyle = '#050505'; x.beginPath(); x.arc(N / 2, N * 0.59, N * 0.055, 0, 7); x.fill(); x.fillRect(N * 0.46, N * 0.77, N * 0.08, N * 0.2);
+    const [sw, sh] = bx.floppybox_strip ?? [0.124, 0.016], w = sw * k, h = sh * k, x0 = (N - w) / 2, y0 = 0.002 * k;
+    x.fillStyle = '#ece4ce'; x.fillRect(x0, y0, w, h);
+    x.fillStyle = d.stripe; x.fillRect(x0, y0, BOXLAB.stripe * w, h);
+    x.textBaseline = 'alphabetic';
+    const fit = (txt, font, cap, maxW) => {
+      x.font = font.replace('$', `${(cap / 0.70).toFixed(1)}px`);
+      const tw = x.measureText(txt).width;
+      if (tw > maxW) x.font = font.replace('$', `${(cap / 0.70 * maxW / tw).toFixed(1)}px`);
+    };
+    const tx = x0 + BOXLAB.x * w, maxW = w * (1 - BOXLAB.x - BOXLAB.right);
+    x.fillStyle = '#221e1c';
+    fit((d.label ?? d.name).replace(/'/g, '\u2019'), `700 $ ${FACES.narrow}`, BOXLAB.nameCap * h, maxW);
+    x.fillText((d.label ?? d.name).replace(/'/g, '\u2019'), tx, y0 + (BOXLAB.nameTop + BOXLAB.nameCap) * h);
+    if (d.detail) {
+      x.fillStyle = '#3a342e';
+      fit(d.detail, `400 $ ${FACES.serif}`, BOXLAB.detailCap * h, maxW);
+      x.fillText(d.detail, tx, y0 + (BOXLAB.detailTop + BOXLAB.detailCap) * h);
+    }
     disk.material.map.needsUpdate = true;
     return disk;
   }
   const P = new THREE.Vector3(), Q = new THREE.Quaternion(), M = new THREE.Matrix4();
   function worldPose(f, pos, quat) { M.compose(pos, quat, new THREE.Vector3(1, 1, 1)).premultiply(f.matrixWorld); const p = new THREE.Vector3(), q = new THREE.Quaternion(); M.decompose(p, q, new THREE.Vector3()); return [p, q]; }
-  const atSlab = (i, up = 0) => worldPose(boxF, slabO(i).addScaledVector(slabUp, SZ / 2 + up), slabQ);
+  const atSlab = (i, up = 0, out = 0) => worldPose(boxF, slabO(i).addScaledVector(slabUp, SZ / 2 + up).addScaledVector(slabN, -out), slabQ);
   const flatQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
   const atSlot = (k) => { const s0 = toB(dx['1541_slot_pos']); return worldPose(drvF, s0.add(new THREE.Vector3(0, -SZ / 2 - 0.015 + k * (SZ + 0.015), 0)), flatQ); };
   function place(fl) {
@@ -622,7 +639,7 @@ export default function mount(live) {
     if (t >= FLY.arc + FLY.slide) { scene().remove(disk); return false; }
     if (t < FLY.arc) {
       const u = t / FLY.arc, e = u * u * (3 - 2 * u);
-      const [a, qa] = atSlab(fl.slab, FLY.lift), [b, qb] = atSlot(0);
+      const [a, qa] = atSlab(fl.slab, FLY.lift, FLY.out), [b, qb] = atSlot(0);
       const c = a.clone().lerp(b, 0.5); c.y = Math.max(a.y, b.y) + FLY.over;
       disk.position.copy(a).multiplyScalar((1 - e) * (1 - e)).addScaledVector(c, 2 * e * (1 - e)).addScaledVector(b, e * e);
       disk.quaternion.copy(qa).slerp(qb, Math.min(1, e * 1.4));
@@ -678,7 +695,7 @@ export default function mount(live) {
     const slab = typed || !slabs || live.reduceMotion.matches ? null : DISKS.length - 1 - DISKS.indexOf(d);
     seq = { d, t: at, E, k: 0, fl: { t: 0, slab } };
     if (slab != null) { if (disk) scene().remove(disk); scene().add(diskMesh(d)); place(seq.fl); }
-    hovered = -1;
+    hovered = -1; hovSlab = -1; if (hovRaf) cancelAnimationFrame(hovRaf); hovRaf = 0;
     loads++;
     const sub = `disk-${slug}`, here = live.view();
     if (history && !live.gate) {
@@ -723,15 +740,37 @@ export default function mount(live) {
     hndc.set((ev.clientX - r.left) / r.width * 2 - 1, -(ev.clientY - r.top) / r.height * 2 + 1);
     hray.setFromCamera(hndc, live.camera);
     const h = hray.intersectObject(box, true)[0];
-    const i = h ? slabAt(h.point) : -1;
-    if (i === hovered) return;
-    if (i < 0) { unhover(); return; }
-    hovered = i;
-    const [p, q] = atSlab(i, FLY.hover);
-    scene().add(diskMesh(diskOfSlab(i))); disk.position.copy(p); disk.quaternion.copy(q);
-    live.render();
+    hover(h ? slabAt(h.point) : -1);
   });
-  function unhover() { hovered = -1; if (disk && !seq) scene().remove(disk); live.render(); }
+  let hovSlab = -1, hovUp = 0, hovRaf = 0, hovCap = FLY.hover;
+  function liftCap(i) {
+    const r = live.renderer.domElement.getBoundingClientRect(), m = new THREE.Matrix4();
+    const topY = (up) => { const [p, q] = atSlab(i, up, FLY.out); m.compose(p, q, new THREE.Vector3(1, 1, 1));
+      return Math.min(...[-1, 1].map((sx) => (1 - new THREE.Vector3(sx * SZ / 2, -TH / 2, SZ / 2).applyMatrix4(m).project(live.camera).y) / 2 * r.height)); };
+    if (topY(FLY.hover) >= 6) return FLY.hover;
+    let lo = 0, hi = FLY.hover;
+    for (let k = 0; k < 10; k++) { const mid = (lo + hi) / 2; if (topY(mid) >= 6) lo = mid; else hi = mid; }
+    return lo;
+  }
+  function hoverPose() { const [p, q] = atSlab(hovSlab, hovUp, FLY.out); disk.position.copy(p); disk.quaternion.copy(q); }
+  function hoverStep() {
+    hovRaf = 0;
+    if (seq || hovSlab < 0) return;
+    const goal = hovered >= 0 ? hovCap : 0;
+    hovUp = live.reduceMotion.matches ? goal : hovUp + (goal - hovUp) * 0.28;
+    if (Math.abs(goal - hovUp) < 0.0003) hovUp = goal;
+    if (hovUp === 0 && hovered < 0) { scene().remove(disk); hovSlab = -1; live.render(); return; }
+    hoverPose(); live.render();
+    if (hovUp !== goal) hovRaf = requestAnimationFrame(hoverStep);
+  }
+  function hover(i, now = false) {
+    if (i === hovered && !now) return;
+    if (i >= 0 && i !== hovSlab) { hovSlab = i; hovUp = 0; hovCap = liftCap(i); scene().add(diskMesh(diskOfSlab(i))); }
+    hovered = i;
+    if (now) { if (hovRaf) cancelAnimationFrame(hovRaf); hovRaf = 0; hovUp = i >= 0 ? hovCap : 0; if (hovSlab >= 0) hoverStep(); return; }
+    if (!hovRaf) hovRaf = requestAnimationFrame(hoverStep);
+  }
+  function unhover() { hover(-1); }
   const strip = document.createElement('nav');
   strip.className = 'c64-strip'; strip.hidden = true;
   strip.setAttribute('aria-label', 'The disks');
@@ -837,6 +876,29 @@ export default function mount(live) {
       eject() { eject(); show(); live.render(); },
       disks: () => DISKS.map((d) => ({ slug: d.slug, name: d.name, rows: d.page ? screenRows(d) : null, card: d.page ? cardText(d) : null })),
       strip: () => [...strip.children].map((a) => { const r = a.getBoundingClientRect(); return { slug: a.dataset.slug, x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height }; }),
+      hoverSlab(i) {
+        if (!slabs) return null;
+        hover(i, true);
+        if (i < 0) return { out: !!disk?.parent };
+        live.render(); disk.updateWorldMatrix(true, false);
+        const r = live.renderer.domElement.getBoundingClientRect(), [sw, sh] = bx.floppybox_strip ?? [0.124, 0.016];
+        const at = (fx, fy) => disk.localToWorld(new THREE.Vector3((fx - 0.5) * sw, -TH / 2 - 0.0002, SZ / 2 - 0.002 - fy * sh));
+        const px = (v) => { const p = v.clone().project(live.camera); return [(p.x + 1) / 2 * r.width, (1 - p.y) / 2 * r.height, p.z]; };
+        const cs = [at(0, 0), at(1, 0), at(0, 1), at(1, 1)].map(px);
+        const meshes = []; scene().traverse((m) => { if (m.isMesh && m.visible && m !== disk) meshes.push(m); });
+        let clear = 0, n = 0;
+        for (const fx of [0.08, 0.3, 0.5, 0.7, 0.92]) for (const fy of [0.15, 0.5, 0.85]) {
+          const w = at(fx, fy), p = px(w); n++;
+          hray.setFromCamera(new THREE.Vector2(p[0] / r.width * 2 - 1, 1 - p[1] / r.height * 2), live.camera);
+          const hit = hray.intersectObjects(meshes, false)[0];
+          if (!hit || hit.distance > live.camera.position.distanceTo(w) - 0.0005) clear++;
+        }
+        const xs = cs.map((c) => c[0]), ys = cs.map((c) => c[1]);
+        const capPx = Math.hypot(...[0, 1].map((k) => px(at(0.5, BOXLAB.nameTop))[k] - px(at(0.5, BOXLAB.nameTop + BOXLAB.nameCap))[k]));
+        return { slab: i, slug: diskOfSlab(i).slug, box: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)],
+          inFrame: Math.min(...xs) >= 0 && Math.min(...ys) >= 0 && Math.max(...xs) <= r.width && Math.max(...ys) <= r.height,
+          clear, of: n, capPx: +capPx.toFixed(1), W: r.width, H: r.height };
+      },
       slabPx(slug) {
         const d = bySlug(slug);
         if (!slabs || !d) return null;
