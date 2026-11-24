@@ -22,6 +22,7 @@ export const DEFAULTS = {
   front: [0.22, 0.35],
   hum: 0.12,
   hold_glow: 0.3,
+  interior: 0,
 };
 export function resolve(json, name) {
   const ps = json?.presets || {}, key = name && ps[name] ? name : json?.active && ps[json.active] ? json.active : null;

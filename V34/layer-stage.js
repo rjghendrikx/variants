@@ -14,6 +14,7 @@ const PROUD = 0.12;
 const RIM = [0.45, 0.4], EDGE = 0.06;
 const SKIRT = { side: 0.35, end: 0.8, down: 1.0, up: 0.8 };
 const WALL = [0.031, 0.024, 0.024], PANE = [0.026, 0.025, 0.028];
+const ROOM = [4.2, -1.8, 1.4, 2.2], GLASS = [1.7, 0.85], SKY = [0.03, 0.035, 0.05], GAIN = 2.6;
 const TAU_UP = 0.1, TAU_DOWN = 0.45;
 const BLOCK = [6, 4];
 const H_PHRASE = 32;
@@ -35,9 +36,10 @@ const ad = (ph, a, d, curve) => clamp(ph < a ? ph / a : 1 - (ph - a) / d) ** cur
 function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const hash = (i, s) => fract(Math.sin(i * 12.9898 + s * 78.233) * 43758.5453);
 
-const VS = `attribute float aLevel; attribute vec4 aTone; attribute vec4 aRect; attribute vec4 aQuad; attribute vec2 aInfo; attribute float aCover;
+const VS = `attribute float aLevel; attribute vec4 aTone; attribute vec4 aRect; attribute vec4 aQuad; attribute vec3 aInfo; attribute float aCover;
   uniform vec3 uDark; uniform vec3 uPane; uniform float uK; uniform float uProud; uniform vec4 uO[4]; uniform vec4 uH[4];
   varying vec3 vC; varying float vA; varying vec2 vP; varying vec2 vR; varying vec4 vQ; varying float vCov;
+  varying vec3 vV; varying float vS; varying float vIn;
   vec3 ramp(vec4 s[4], float a) { vec3 c = s[0].yzw; for (int i = 1; i < 4; i++) c = mix(c, s[i].yzw, smoothstep(s[i - 1].x, s[i].x, a)); return c; }
   void main() {
     bool office = aInfo.x < 0.5;
@@ -48,14 +50,94 @@ const VS = `attribute float aLevel; attribute vec4 aTone; attribute vec4 aRect; 
     vP = vec2(mix(aQuad.x, aQuad.y, position.x + 0.5), mix(aQuad.z, aQuad.w, position.y + 0.5));
     // on the baked pane's plane, then PROUD toward the eye along the view ray: in front for the depth test, and no
     // parallax against the bake (offset along the normal, a cover slid ~0.25 m off its pane at the University's angles)
+    mat3 R = mat3(modelMatrix * instanceMatrix);
     vec4 wp = modelMatrix * instanceMatrix * vec4(vP, 0.0, 1.0);
-    vec3 nw = normalize(mat3(modelMatrix * instanceMatrix) * vec3(0.0, 0.0, 1.0)), e = cameraPosition - wp.xyz;
+    vec3 nw = normalize(R[2]), e = cameraPosition - wp.xyz;
+    vV = -e * R;   // the view ray in the panel's frame (R is a rotation: e * R is R^T e), linear on the quad
+    vIn = office ? smoothstep(0.05, 0.3, aLevel) : 0.0;
+    vS = aInfo.z;   // the room's variant, hashed on the CPU: a hash of an interpolated varying flickers per pixel
     wp.xyz += e * (uProud / max(dot(e, nw), 1e-3));
     gl_Position = projectionMatrix * viewMatrix * wp; }`;
-const FS = `uniform vec3 uWall; varying vec3 vC; varying float vA; varying vec2 vP; varying vec2 vR; varying vec4 vQ; varying float vCov;
+const FS = `uniform vec3 uWall; uniform vec4 uRoom; uniform vec2 uGlass; uniform float uInterior; uniform float uGain; uniform vec3 uSky;
+  varying vec3 vC; varying float vA; varying vec2 vP; varying vec2 vR; varying vec4 vQ; varying float vCov;
+  varying vec3 vV; varying float vS; varying float vIn;
+  float h1(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
+  float box(vec2 p, vec4 r, float aa) {   // 1 inside [r.x, r.y] x [r.z, r.w], soft by aa
+    vec2 a = smoothstep(r.xz - aa, r.xz + aa, p) * (1.0 - smoothstep(r.yw - aa, r.yw + aa, p)); return a.x * a.y; }
+  float rep(float x, float P, float lo, float hi, float aa) {   // 1 on [lo, hi] of every period P; its mean once P nears a pixel
+    float w = aa / P, f = fract(x / P); return mix(smoothstep(lo - w, lo + w, f) * (1.0 - smoothstep(hi - w, hi + w, f)), hi - lo, smoothstep(0.08, 0.25, w)); }
+  // the room: uRoom = (half width, floor y, ceiling y, depth), metres from the window's centre; variant v of 6
+  vec3 room(vec3 d, float v, float aa, out float lit) {
+    vec3 o = vec3(vP, 0.0);
+    float W = uRoom.x, F = uRoom.y, C = uRoom.z, D = uRoom.w;
+    vec3 tt = vec3(((d.x > 0.0 ? W : -W) - o.x) / d.x, ((d.y > 0.0 ? C : F) - o.y) / d.y, (-D - o.z) / d.z);
+    float t = min(tt.x, min(tt.y, tt.z));
+    vec3 h = o + d * t;
+    vec3 n = tt.z <= t ? vec3(0.0, 0.0, 1.0) : tt.x <= t ? vec3(-sign(d.x), 0.0, 0.0) : vec3(0.0, -sign(d.y), 0.0);
+    vec3 alb = vec3(0.78, 0.74, 0.67);    // plaster, warm off-white
+    float y = h.y - F, ab = aa * (1.0 + 3.0 * (1.0 - abs(dot(n, normalize(d))))), fine = 1.0 - smoothstep(0.01, 0.025, ab);   // fine: detail under a pixel fades to its mean
+    lit = 0.0;
+    if (n.y < -0.5) {   // the ceiling: tiles, and the light (two tubes into the room; the lecture hall's run along it)
+      alb = vec3(0.82, 0.80, 0.76) * (0.93 + 0.07 * rep(h.x, 0.6, 0.04, 0.96, ab) * rep(h.z, 0.6, 0.04, 0.96, ab));
+      vec2 q = v < 0.5 ? vec2(abs(abs(h.z + D * 0.5) - D * 0.25), h.x) : vec2(abs(abs(h.x) - W * 0.5), h.z + D * 0.5);
+      lit = box(q, vec4(-0.09, 0.09, -W * 0.75, W * 0.75), ab);
+    } else if (n.y > 0.5) {   // the floor: linoleum, a carpet in the offices
+      alb = v == 1.0 || v == 5.0 ? vec3(0.30, 0.32, 0.36) : vec3(0.42, 0.36, 0.30);
+    } else if (n.z > 0.5) {   // the back wall
+      vec2 p = vec2(h.x, y);
+      if (v < 0.5) alb = mix(alb, vec3(0.10, 0.17, 0.13), box(p, vec4(-2.0, 1.3, 0.9, 2.1), ab));   // a blackboard
+      else if (v < 1.5) { float s = box(p, vec4(0.2, W - 0.1, 0.0, 2.1), ab);   // a bookcase, and a framed print
+        alb = mix(alb, mix(vec3(0.35, 0.24, 0.16), vec3(0.55, 0.42, 0.30) * (1.0 + fine * (0.6 * h1(floor(h.x / 0.09)) - 0.3)), box(p, vec4(0.25, W - 0.15, -1.0, 9.0), ab) * rep(y, 0.42, 0.08, 0.85, ab)), s);
+        alb = mix(alb, vec3(0.45, 0.50, 0.58), box(p, vec4(-1.3, -0.5, 1.2, 1.8), ab)); }
+      else if (v < 2.5) { alb = mix(alb, vec3(0.40, 0.35, 0.30), box(p, vec4(-0.5, 0.5, 0.0, 2.1), ab));   // the corridor's end: a door
+        lit = 0.6 * box(p, vec4(-0.18, 0.18, 2.25, 2.4), ab); }   // its exit sign
+      else if (v < 3.5) { alb = mix(alb, vec3(0.36, 0.33, 0.30), box(p, vec4(-W, W, 0.0, 0.95), ab));   // a whiteboard over a wooden dado
+        alb = mix(alb, vec3(0.30, 0.30, 0.32), box(p, vec4(-1.4, 1.4, 1.05, 2.15), ab)); alb = mix(alb, vec3(0.95, 0.95, 0.93), box(p, vec4(-1.35, 1.35, 1.1, 2.1), ab)); }
+      else if (v < 4.5) alb = mix(alb, vec3(0.86, 0.87, 0.86) * (0.85 + 0.15 * rep(h.x, 0.6, 0.04, 0.96, ab)), box(p, vec4(-W, 0.9, 0.0, 2.2), ab));   // lab cupboards
+      else { float s = box(p, vec4(-2.8, 1.2, 0.0, 2.2), ab);   // the library: shelves of spines
+        vec3 sp = vec3(0.45) + fine * 0.14 * cos(6.283 * (h1(floor(h.x / 0.09) + 7.0 * floor(y / 0.4)) + vec3(0.0, 0.33, 0.67)));
+        alb = mix(alb, mix(vec3(0.30, 0.24, 0.18), sp * 0.8, rep(y, 0.4, 0.06, 0.82, ab)), s); }
+    } else {   // a side wall: a notice board, a door in the corridor, a skirting and a picture rail
+      vec2 p = vec2(-h.z, y);
+      if (v > 1.5 && v < 2.5) alb = mix(alb, vec3(0.40, 0.35, 0.30), rep(p.x, 2.4, 0.3, 0.68, ab) * box(vec2(y, 0.0), vec4(0.0, 2.1, -1.0, 1.0), ab));
+      else if (v > 0.5) alb = mix(alb, vec3(0.52, 0.48, 0.42), box(p, vec4(0.3, D - 0.4, 1.1, 1.9), ab));
+      alb *= 1.0 - 0.4 * box(vec2(y, 0.0), vec4(0.0, 0.1, -1.0, 1.0), ab);
+    }
+    // furniture: one plane parallel to the window, cut out (a desk row, a table, a tall plant, the lab's bench, a cabinet)
+    float zf = -D * (v < 0.5 ? 0.45 : 0.55), tf = (zf - o.z) / d.z;
+    if (tf < t && v != 2.0) {
+      vec2 f = (o + d * tf).xy; f.y -= F;
+      float m = 0.0; vec3 fc = vec3(0.45, 0.33, 0.22);
+      if (v < 0.5 || v == 3.0) { m = box(f, vec4(-W + 0.2, W - 0.2, 0.68, 0.76), ab) + rep(f.x, 0.7, 0.3, 0.7, ab) * box(vec2(f.y, 0.0), vec4(0.45, 1.02, -1.0, 1.0), ab) * box(f, vec4(-W + 0.3, W - 0.3, 0.0, 1.1), ab);   // the desk or table, chair backs
+        fc = mix(vec3(0.18, 0.18, 0.2), fc, step(0.68, f.y)); }
+      else if (v == 1.0) { m = box(f, vec4(-1.0, 0.6, 0.7, 0.76), ab) + box(f, vec4(-0.6, -0.1, 0.78, 1.1), ab) + box(vec2(length((f - vec2(-1.5, 1.5)) * vec2(1.0, 1.3)), 0.0), vec4(-1.0, 0.38, -1.0, 1.0), ab);   // desk, monitor, a plant
+        fc = f.y > 1.15 ? vec3(0.22, 0.36, 0.20) : f.y > 0.77 ? vec3(0.12, 0.12, 0.14) : fc; }
+      else if (v == 4.0) { m = box(f, vec4(-W + 0.3, W - 0.3, 0.0, 0.92), ab) + box(f, vec4(-W + 0.4, W - 0.4, 1.35, 1.4), ab); fc = vec3(0.7, 0.72, 0.72); }   // the bench, a reagent shelf
+      else { m = box(f, vec4(-0.8, 0.8, 0.7, 0.76), ab); }   // a reading table
+      m = clamp(m, 0.0, 1.0);
+      if (m > 0.0) { alb = mix(alb, fc, m); n = mix(n, vec3(0.0, 0.0, 1.0), m); h = mix(h, vec3(f.x, f.y + F, zf), m); lit *= 1.0 - m; }
+    }
+    // the room's light: ambient, plus the ceiling fixture's falloff (dim by the window, bright toward the middle)
+    vec3 L = vec3(0.0, C - 0.1, -D * 0.5) - h;
+    float r2 = dot(L, L), dif = max(dot(n, L) * inversesqrt(r2), 0.0);
+    return alb * (0.3 + 2.2 * dif / (1.0 + r2 / 4.0));
+  }
   void main() {
     vec2 d = abs(vP) - vR;
-    if (max(d.x, d.y) <= 0.0) { gl_FragColor = vec4(vC, vA); return; }
+    float aa = 0.7 * max(fwidth(vP.x), fwidth(vP.y)), lit;   // before any branch: derivatives need the whole quad
+    if (max(d.x, d.y) <= 0.0) {
+      vec3 c = vC; float k = uInterior * vIn;
+      vec2 g = abs(vP) - uGlass;
+      if (k > 0.0 && max(g.x, g.y) < 0.0) {
+        vec3 v = normalize(vV); v.z = min(v.z, -0.02);
+        vec3 rc = room(v, floor(vS), aa, lit);
+        vec3 inside = vC * min(rc * uGain + lit * 1.4, vec3(1.15));   // the room's mean is the flat pane's, its peak the lamp's
+        float mul = 1.0 - 0.6 * box(vec2(abs(abs(vP.x) - uGlass.x / 3.0), 0.0), vec4(-0.03, 0.03, -1.0, 1.0), aa);   // the mullions
+        float fr = pow(1.0 - abs(v.z), 5.0);   // the glass: a little of the night sky at grazing angles, more as it lights
+        inside = mix(inside * mul, uSky, 0.03 + 0.4 * fr);
+        c = mix(c, inside, k);
+      }
+      gl_FragColor = vec4(c, vA); return; }
     if (vCov <= 0.0) discard;
     float ex = (vP.x > 0.0 ? vQ.y : -vQ.x) - vR.x, ey = (vP.y > 0.0 ? vQ.w : -vQ.z) - vR.y;
     float t = max(max(d.x, 0.0) / ex, max(d.y, 0.0) / ey);
@@ -89,7 +171,7 @@ export default function mount(live) {
   const mesh = noPick(new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), null, N));
   const panels = [];
   const m = new THREE.Matrix4(), c = new THREE.Vector3(), n = new THREE.Vector3(), t = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
-  const tone = new Float32Array(N * 4), rect = new Float32Array(N * 4), quad = new Float32Array(N * 4), cover = new Float32Array(N), infoA = new Float32Array(N * 2);
+  const tone = new Float32Array(N * 4), rect = new Float32Array(N * 4), quad = new Float32Array(N * 4), cover = new Float32Array(N), infoA = new Float32Array(N * 3);
   for (let i = 0; i < N; i++) {
     const [x, y, z, nx, nz, w, h, kind, tn] = raw.slice(9 * i, 9 * i + 9);
     c.set(x, y, z).applyMatrix4(far.matrixWorld);
@@ -131,7 +213,7 @@ export default function mount(live) {
       if (kind === 0) { G.rows = Math.max(G.rows, p.f + 1); G.cols = Math.max(G.cols, p.c + 1); }
     }
   }
-  panels.forEach((p, i) => { const hs = hash(i, 1); p.g = Math.floor(hs * 3); p.both = fract(hs * 7.31) < 0.33; infoA.set([p.kind, p.u], 2 * i); });
+  panels.forEach((p, i) => { const hs = hash(i, 1); p.g = Math.floor(hs * 3); p.both = fract(hs * 7.31) < 0.33; infoA.set([p.kind, p.u, Math.floor(hash(i, 5) * 6) + 0.5], 3 * i); });
   const offices = panels.map((p, i) => (p.kind === 0 ? i : -1)).filter((i) => i >= 0);
   const houses = panels.map((p, i) => (p.kind === 1 ? i : -1)).filter((i) => i >= 0);
 
@@ -246,9 +328,11 @@ export default function mount(live) {
   mesh.geometry.setAttribute('aRect', new THREE.InstancedBufferAttribute(rect, 4));
   mesh.geometry.setAttribute('aQuad', new THREE.InstancedBufferAttribute(quad, 4));
   mesh.geometry.setAttribute('aCover', new THREE.InstancedBufferAttribute(cover, 1));
-  mesh.geometry.setAttribute('aInfo', new THREE.InstancedBufferAttribute(infoA, 2));
+  mesh.geometry.setAttribute('aInfo', new THREE.InstancedBufferAttribute(infoA, 3));
   const stops = (name) => RAMPS[name].map(([s, [r, g, b]]) => new THREE.Vector4(s, r, g, b));
-  const U = { uK: { value: 0 }, uProud: { value: PROUD }, uDark: { value: new THREE.Vector3(...DARK) }, uPane: { value: new THREE.Vector3(...PANE) }, uWall: { value: new THREE.Vector3(...WALL) }, uO: { value: stops('office') }, uH: { value: stops('home') } };
+  const U = { uK: { value: 0 }, uProud: { value: PROUD }, uDark: { value: new THREE.Vector3(...DARK) }, uPane: { value: new THREE.Vector3(...PANE) }, uWall: { value: new THREE.Vector3(...WALL) }, uO: { value: stops('office') }, uH: { value: stops('home') },
+    uRoom: { value: new THREE.Vector4(...ROOM) }, uGlass: { value: new THREE.Vector2(...GLASS) }, uSky: { value: new THREE.Vector3(...SKY) },
+    uGain: { value: GAIN }, uInterior: { value: clamp(preset.interior ?? 0) } };
   mesh.material = new THREE.ShaderMaterial({ uniforms: U, vertexShader: VS, fragmentShader: FS, transparent: true, depthWrite: false,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8 });
   mesh.name = 'stage_windows';
