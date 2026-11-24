@@ -953,6 +953,16 @@ async function start() {
     more.setAttribute('aria-controls', roomRow.id);
     more.addEventListener('click', () => setMore(more.getAttribute('aria-expanded') !== 'true'));
     workRow.appendChild(more);
+    if (!reduceMotion.matches && !params.has('nointro')) {
+      const again = Object.assign(document.createElement('button'), { type: 'button', className: 'again', textContent: 'Fly in again' });
+      again.addEventListener('click', () => {
+        const u = new URL(location.href);
+        u.searchParams.delete('intro');
+        u.hash = '';
+        location.assign(u.pathname + (u.search ? u.search + '&intro' : '?intro'));
+      });
+      roomRow.appendChild(again);
+    }
     nav.append(workRow, roomRow);
     setMore(false);
     syncNav();
