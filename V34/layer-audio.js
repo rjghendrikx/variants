@@ -1,4 +1,4 @@
-import { expWait, rng, seedFrom } from './layer-common.js';
+import { rng, seedFrom } from './layer-common.js';
 
 const STORE_KEY = 'room.sound';
 const MASTER = 0.6;
@@ -6,155 +6,134 @@ const FADE_IN = 0.9, FADE_OUT = 0.35;
 const GLASS = 0.35;
 const DUCK = 0.6;
 const AMB = {
-  level: 0.55,
-  width: 0.08,
-  hiss: { level: 0.55, rate: 1800, noise: 0.22, tilt: 2200, hp: 320, dip: 3300, lp: 5000, am: 0.12, amHz: 18 },
-  patter: { rate: 260, level: 0.4, lp: 700 },
-  ticks: { level: 0.17, rate: 8 },
-  drops: { level: 0.3, rate: 1.0, sill: 0.4 },
-  trickle: { level: 0.12, pan: 0.45, lp: 1800, drip: 3.2 },
-  city: { level: 0.05, hp: 70, lp: 420 },
+  level: 0.8,
+  bed: {
+    window: { file: 'rain-window', level: 0.2, spread: 0.3 },
+    outside: { file: 'rain-outside', level: 0.09, spread: 0.55, shelf: -10 },
+    seg: [16, 30], xf: 5,
+    drift: [7, 18], range: 5,
+    shelf: -4,
+    lull: { gap: [45, 120], len: [18, 45], depth: 0.25 },
+  },
+  voice: { gap: [8, 34], first: 6, space: 0.2, rest: 240 },
+  voices: [
+    { file: 'gutter', w: 2, level: 0.42, lp: 1500, pan: [0.35, 0.55], dur: [7, 16] },
+    { file: 'coot', w: 1.6, level: 0.42, lp: 2600, pan: [-0.45, 0.45], rate: [0.94, 1.04] },
+    { file: 'creak', w: 1.2, level: 0.32, lp: 2000, pan: [-0.25, 0.25], rate: [0.5, 0.7] },
+    { file: 'gull', w: 1.4, level: 0.2, lp: 2600, pan: [-0.5, 0.5], dur: [3.5, 7], rate: [0.95, 1.03] },
+    { file: 'bell', w: 0.8, level: 0.34, lp: 1500, pan: [-0.3, 0.3], dur: [8, 14.9] },
+    { file: 'thunder', w: 0.4, level: 0.45, lp: 450, pan: [-0.2, 0.2], dur: [9, 15] },
+    { file: 'blackbird', w: 1.0, level: 0.26, lp: 5500, pan: [-0.35, 0.35], after: 200 },
+  ],
   pan: 0.35,
 };
-const BOAT = { fire: 36, level: 0.35, ref: 8, lpNear: 320, lpFar: 110, procS: 20, procGap: [70, 200] };
+const BOAT = { fire: 36, level: 0.12, ref: 8, lpNear: 220, lpFar: 110, procS: 20, procGap: [70, 200] };
 const CLICK = { level: 1.2, hp: 1800, ms: 6, tau: 0.0007 };
 const C_SOUND = 343;
 
 const TAU = 2 * Math.PI;
-function waveOf(sr, sec, fn) { const n = Math.max(1, Math.ceil(sr * sec)), w = new Float32Array(n); for (let i = 0; i < n; i++) w[i] = fn(i / sr, i); return w; }
-function glassDrop(sr, rand) {
-  const f = 1100 + rand() * 1900, tau = 0.002 + rand() * 0.005, tc = 0.0006 + rand() * 0.0008, ta = 0.0003 + rand() * 0.0005, ph = rand() * TAU;
-  let lp = 0;
-  return waveOf(sr, tau * 5, (t) => { lp += 0.25 * ((rand() * 2 - 1) - lp);
-    return (1 - Math.exp(-t / ta)) * (lp * 0.9 * Math.exp(-t / tc)
-      + Math.exp(-t / tau) * (Math.sin(TAU * f * t + ph) * 0.5 + Math.sin(TAU * f * 2.31 * t) * 0.12 * Math.exp(-t / tau))); });
-}
-function sillDrop(sr, rand) {
-  const f = 300 + rand() * 500, tau = 0.008 + rand() * 0.016, tc = 0.001 + rand() * 0.001, ta = 0.0008 + rand() * 0.0008;
-  let ph = 0, lp = 0;
-  return waveOf(sr, tau * 6, (t) => { ph += TAU * f * (1 - 0.15 * Math.min(1, t / tau / 3)) / sr; lp += 0.12 * ((rand() * 2 - 1) - lp);
-    return (1 - Math.exp(-t / ta)) * (lp * 1.6 * Math.exp(-t / tc) + Math.sin(ph) * 0.7 * Math.exp(-t / tau)); });
-}
-function plink(sr, rand, f0 = 900 + rand() * 1500, tau = 0.01 + rand() * 0.03) {
-  let ph = 0, e = 1;
-  const k = Math.exp(-1 / (tau * sr));
-  const ra = Math.max(8, Math.round(sr * 0.0015));
-  return waveOf(sr, tau * 6, (t, i) => { ph += TAU * f0 * (1 + 0.9 * t / (tau * 6)) / sr; e *= k; return Math.sin(ph) * e * Math.min(1, i / ra); });
-}
-function texture(ctx, sec, fill) {
-  const sr = ctx.sampleRate, n = Math.floor(sr * sec), buf = ctx.createBuffer(2, n, sr);
-  fill(buf.getChannelData(0), buf.getChannelData(1), n, sr);
-  return buf;
-}
-function put(L, R, n, at, w, amp, pan) {
-  const gl = Math.cos((pan + 1) * Math.PI / 4) * amp, gr = Math.sin((pan + 1) * Math.PI / 4) * amp;
-  for (let i = 0; i < w.length; i++) { const k = (at + i) % n; L[k] += w[i] * gl; R[k] += w[i] * gr; }
-}
-function poisson(rand, sec, rate, fn) { for (let t = expWait(rand, rate); t < sec; t += expWait(rand, rate)) fn(t); }
+const rnd = (rand, [a, b]) => a + (b - a) * rand();
+const FADE_UP = Float32Array.from({ length: 64 }, (_, i) => Math.sin(i / 63 * Math.PI / 2));
+const FADE_DOWN = FADE_UP.slice().reverse();
+export const AUDIO_FILES = [...new Set([AMB.bed.window.file, AMB.bed.outside.file, ...AMB.voices.map((v) => v.file)])];
+export const audioUrl = (file) => new URL(`audio/${file}.mp3`, import.meta.url).href;
+export const loadAudio = (ctx, file) => fetch(audioUrl(file))
+  .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${file} ${r.status}`)))).then((b) => ctx.decodeAudioData(b));
 
-export function ambience(ctx, out, rand, job = (f) => f()) {
-  const sr = ctx.sampleRate, A = AMB;
+export function ambience(ctx, out, rand, load, { voices: withVoices = true } = {}) {
+  const sr = ctx.sampleRate, A = AMB, B = A.bed, V = A.voice;
   const filt = (type, f, q = 0.707, g = 0) => { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; b.gain.value = g; return b; };
   const gain = (v) => { const x = ctx.createGain(); x.gain.value = v; return x; };
-  const loop = (buf, dest, rate = 1) => { const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; s.playbackRate.value = rate; s.connect(dest); s.start(0, rand() * buf.duration); return s; };
-  const sum = gain(1), pan = ctx.createStereoPanner(), level = gain(A.level), duck = gain(1);
-  sum.connect(pan).connect(level).connect(duck).connect(out);
+  const panAt = (v) => { const p = ctx.createStereoPanner(); p.pan.value = v; return p; };
+  const sum = gain(1), level = gain(A.level), duck = gain(1), bedPan = ctx.createStereoPanner(), voices = gain(1);
+  sum.connect(level).connect(duck).connect(out);
+  bedPan.connect(filt('highshelf', 3000, 0.707, B.shelf)).connect(sum);
+  voices.connect(sum);
+  const bufs = {};
+  const ready = Promise.all(AUDIO_FILES.map((f) => load(f).then((b) => { bufs[f] = b; }, () => {})));
 
-  const H = A.hiss, Pt = A.patter;
-  const onePoleWrap = (ch, n, fc) => { const k = 1 - Math.exp(-TAU * fc / sr); let y = 0;
-    for (let i = 0; i < n; i++) y += k * (ch[i] - y);
-    for (let i = 0; i < n; i++) { y += k * (ch[i] - y); ch[i] = y; } };
-  const NT = 8192, nt = Float32Array.from({ length: NT }, () => rand() * 2 - 1);
-  const micro = (L, R, n) => {
-    const tmp = new Float32Array(n);
-    for (const ch of [L, R]) {
-      for (let i = 0; i < n; i++) ch[i] = (rand() * 2 - 1) * H.noise;
-      poisson(rand, n / sr, H.rate, (t) => {
-        const tc = 0.00005 + rand() * 0.00035, a = rand() ** 3 * 1.6, at = Math.floor(t * sr), m = Math.ceil(tc * 4 * sr);
-        const k = Math.exp(-1 / (tc * sr));
-        const o = Math.floor(rand() * (NT - m));
-        for (let i = 0, e = a; i < m; i++, e *= k) ch[(at + i) % n] += nt[o + i] * e;
-      });
-      tmp.fill(0);
-      poisson(rand, n / sr, Pt.rate, (t) => {
-        const tc = 0.0008 + rand() * 0.0017, a = (0.5 + 0.5 * rand() ** 2) * Pt.level, at = Math.floor(t * sr), m = Math.ceil(tc * 3 * sr);
-        const k = Math.exp(-1 / (tc * sr)), ra = Math.ceil(sr * 0.0004);
-        const o = Math.floor(rand() * (NT - m));
-        for (let i = 0, e = a; i < m; i++, e *= k) tmp[(at + i) % n] += nt[o + i] * (i < ra ? e * i / ra : e);
-      });
-      onePoleWrap(tmp, n, Pt.lp);
-      for (let i = 0; i < n; i++) ch[i] += tmp[i];
-      onePoleWrap(ch, n, H.tilt);
-    }
-    for (let i = 0; i < n; i++) { const l = L[i], r = R[i]; L[i] = l + A.width * r; R[i] = r + A.width * l; }
-  };
-  const hissIn = gain(1), hissAm = gain(1);
-  for (const [sec, rate] of [[11.3, 1], [13.9, 0.985]]) job(() => loop(texture(ctx, sec, micro), hissIn, rate));
-  hissIn.connect(filt('highpass', H.hp)).connect(filt('peaking', H.dip, 0.9, -4))
-    .connect(filt('lowpass', H.lp)).connect(hissAm).connect(gain(H.level)).connect(sum);
-  const amDepth = gain(H.am);
-  amDepth.connect(hissAm.gain);
-  job(() => { const amBuf = ctx.createBuffer(1, Math.floor(sr * 7.7), sr), am = amBuf.getChannelData(0); const k = 1 - Math.exp(-TAU * H.amHz / sr); let y = 0, pk = 0;
-    for (let pass = 0; pass < 2; pass++) for (let i = 0; i < am.length; i++) { y += k * ((rand() * 2 - 1) - y); if (pass) { am[i] = y; pk = Math.max(pk, Math.abs(y)); } }
-    for (let i = 0; i < am.length; i++) am[i] /= pk || 1;
-    loop(amBuf, amDepth); });
-  const T = A.ticks;
-  const tickTex = (L, R, n) => poisson(rand, n / sr, T.rate, (t) => put(L, R, n, Math.floor(t * sr), glassDrop(sr, rand), 0.25 + rand() ** 2 * 0.5, (rand() * 2 - 1) * 0.9));
-  const tickIn = gain(T.level);
-  tickIn.connect(sum);
-  for (const sec of [17.3, 19.1]) job(() => loop(texture(ctx, sec, tickTex), tickIn));
-  const D = A.drops, one = (w) => { const b = ctx.createBuffer(1, w.length, sr); b.copyToChannel(w, 0); return b; };
-  let glass = [], sill = [], drips = [];
-  job(() => { glass = Array.from({ length: 16 }, () => one(glassDrop(sr, rand))); sill = Array.from({ length: 8 }, () => one(sillDrop(sr, rand)));
-    drips = Array.from({ length: 8 }, () => one(plink(sr, rand, 650 + rand() * 600, 0.03 + rand() * 0.025))); });
-  const dropBus = gain(D.level);
-  dropBus.connect(sum);
-  const strips = Array.from({ length: 8 }, () => { const gn = gain(0), p = ctx.createStereoPanner(); gn.connect(p).connect(dropBus); return { gn, p }; });
-  const C = A.trickle;
-  const trickleTex = (L, R, n) => {
-    let lp = 0; for (let i = 0; i < n; i++) { lp += 0.05 * ((rand() * 2 - 1) - lp); L[i] = lp * 0.5; R[i] = lp * 0.4; }
-    poisson(rand, n / sr, 28, (t) => put(L, R, n, Math.floor(t * sr), plink(sr, rand, 600 + rand() * 1400, 0.004 + rand() * 0.012), 0.1 + rand() ** 2 * 0.4, (rand() * 2 - 1) * 0.5));
-  };
-  const trickle = gain(1), tricklePan = ctx.createStereoPanner();
-  tricklePan.pan.value = C.pan;
-  trickle.connect(filt('highpass', 150)).connect(filt('lowpass', C.lp)).connect(gain(C.level)).connect(tricklePan).connect(sum);
-  job(() => loop(texture(ctx, 23.1, trickleTex), trickle));
-  const dripStrip = gain(0);
-  dripStrip.connect(trickle);
-  const pinkTex = (L, R, n) => { for (const ch of [L, R]) { let b0 = 0, b1 = 0, b2 = 0;
-    for (let i = 0; i < n; i++) { const w = rand() * 2 - 1; b0 = 0.99765 * b0 + w * 0.099046; b1 = 0.963 * b1 + w * 0.2965164; b2 = 0.57 * b2 + w * 1.0526913; ch[i] = (b0 + b1 + b2 + w * 0.1848) * 0.12; } } };
-  const cityIn = filt('highpass', A.city.hp);
-  cityIn.connect(filt('lowpass', A.city.lp)).connect(gain(A.city.level)).connect(sum);
-  job(() => loop(texture(ctx, 9.7, pinkTex), cityIn));
+  const space = ctx.createConvolver(), ir = ctx.createBuffer(2, Math.floor(sr * 1.8), sr);
+  for (let c = 0; c < 2; c++) { const ch = ir.getChannelData(c), k = 1 - Math.exp(-TAU * 2500 / sr); let y = 0;
+    for (let i = 0; i < ch.length; i++) { y += k * ((rand() * 2 - 1) - y); ch[i] = y * Math.exp(-i / (sr * 0.45)) * Math.min(1, i / (sr * 0.012)); } }
+  space.buffer = ir;
+  const spaceIn = gain(V.space);
+  spaceIn.connect(space).connect(sum);
 
-  let nextDrop = 0, nextDrip = 0.4, strip = 0, intensity = 1;
-  function schedule(t0, t1) {
-    if (!drips.length) return;
-    if (nextDrop < t0) nextDrop = t0 + expWait(rand, D.rate);
-    while (nextDrop < t1) {
-      intensity = Math.min(1.4, Math.max(0.6, intensity + (rand() - 0.5) * 0.08));
-      const s = ctx.createBufferSource(), st = strips[strip++ % strips.length], onSill = rand() < D.sill;
-      s.buffer = onSill ? sill[Math.floor(rand() * sill.length)] : glass[Math.floor(rand() * glass.length)];
-      s.playbackRate.value = 0.85 + rand() * 0.3;
-      st.gn.gain.setValueAtTime((onSill ? 0.45 : 0.3) + rand() ** 2 * 0.3, nextDrop);
-      st.p.pan.setValueAtTime((rand() * 2 - 1) * (onSill ? 0.5 : 0.9), nextDrop);
-      s.connect(st.gn); s.start(nextDrop);
-      nextDrop += expWait(rand, D.rate * intensity);
-    }
-    if (nextDrip < t0) nextDrip = t0 + C.drip * (0.5 + rand());
-    while (nextDrip < t1) {
-      const s = ctx.createBufferSource();
-      s.buffer = drips[Math.floor(rand() * drips.length)];
-      s.playbackRate.value = 0.9 + rand() * 0.2;
-      dripStrip.gain.setValueAtTime(0.4 + rand() * 0.3, nextDrip);
-      s.connect(dripStrip); s.start(nextDrip);
-      nextDrip += C.drip * (0.5 + rand());
+  const beds = ['window', 'outside'].map((k) => {
+    const c = B[k], g = gain(c.level), head = c.shelf ? filt('highshelf', 2000, 0.707, c.shelf) : gain(1);
+    head.connect(g).connect(bedPan);
+    const chains = [-c.spread, c.spread].map((p) => { const pn = panAt(p); pn.connect(head); return { pn, next: 0 }; });
+    return { c, g, chains, db: 0 };
+  });
+  function excerpt(bed, ch, t) {
+    const buf = bufs[bed.c.file], len = Math.min(rnd(rand, B.seg), buf.duration - 0.1), off = rand() * (buf.duration - len);
+    const s = ctx.createBufferSource(), g = gain(0);
+    s.buffer = buf;
+    s.connect(g).connect(ch.pn);
+    g.gain.setValueCurveAtTime(FADE_UP, t, B.xf);
+    g.gain.setValueAtTime(1, t + B.xf);
+    g.gain.setValueCurveAtTime(FADE_DOWN, t + len - B.xf, B.xf);
+    s.start(t, off, len);
+    return t + len - B.xf;
+  }
+  let nextDrift = 0, nextLull = rnd(rand, B.lull.gap), lullEnd = -1;
+  function weather(t) {
+    const lull = t < lullEnd;
+    for (const b of beds) {
+      b.db = Math.max(-B.range, Math.min(B.range, b.db + (rand() * 2 - 1) * B.range * 0.7));
+      b.g.gain.setTargetAtTime(b.c.level * 10 ** (b.db / 20) * (lull ? B.lull.depth : 1), t, lull ? 3 : 4);
     }
   }
+
+  const heard = {};
+  let nextVoice = V.first, last = null, ducked = false, played = 0;
+  const log = [];
+  function voice(t) {
+    const pool = A.voices.filter((v) => bufs[v.file] && v !== last && !(v.after > t));
+    if (!pool.length) return t + 5;
+    const w = (x) => x.w * Math.min(1, 0.05 + (t - (heard[x.file] ?? -1e9)) / V.rest);
+    let r = rand() * pool.reduce((a, x) => a + w(x), 0), v = pool[0];
+    for (const x of pool) { r -= w(x); if (r <= 0) { v = x; break; } }
+    const buf = bufs[v.file], rate = v.rate ? rnd(rand, v.rate) : 1;
+    const len = v.dur ? Math.min(rnd(rand, v.dur), buf.duration / rate) : buf.duration / rate;
+    const off = v.dur ? rand() * (buf.duration - len * rate) : 0, fade = v.dur ? Math.min(1.5, len / 4) : 0;
+    const s = ctx.createBufferSource(), g = gain(v.level), lp = filt('lowpass', v.lp), p = panAt(rnd(rand, v.pan));
+    s.buffer = buf; s.playbackRate.value = rate;
+    s.connect(lp).connect(g).connect(p);
+    p.connect(voices); p.connect(spaceIn);
+    if (fade) {
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v.level, t + fade);
+      g.gain.setValueAtTime(v.level, t + len - fade); g.gain.linearRampToValueAtTime(0, t + len);
+    }
+    s.start(t, off, len * rate);
+    last = v; played++; heard[v.file] = t;
+    log.push([+t.toFixed(1), v.file]);
+    return t + len + rnd(rand, V.gap);
+  }
+
+  function schedule(t0, t1) {
+    if (!bufs[B.window.file] && !bufs[B.outside.file]) return;
+    for (const b of beds) for (const ch of b.chains) {
+      if (!bufs[b.c.file]) continue;
+      if (ch.next < t0) ch.next = t0 + 0.1;
+      while (ch.next < t1) ch.next = excerpt(b, ch, ch.next);
+    }
+    for (;;) {
+      const t = Math.min(nextDrift, nextLull, lullEnd > 0 ? lullEnd : Infinity);
+      if (t >= t1) break;
+      const at = Math.max(t, t0);
+      if (t === nextLull) { lullEnd = at + rnd(rand, B.lull.len); nextLull = lullEnd + rnd(rand, B.lull.gap); weather(at); }
+      else if (t === lullEnd) { lullEnd = -1; weather(at); }
+      else { weather(at); nextDrift = at + rnd(rand, B.drift); }
+    }
+    if (nextVoice < t0) nextVoice = t0 + rnd(rand, V.gap) / 2;
+    while (withVoices && nextVoice < t1) nextVoice = ducked ? nextVoice + 5 : voice(nextVoice);
+  }
   return {
-    out: duck, schedule,
-    duck(on, t = ctx.currentTime) { duck.gain.cancelScheduledValues(t); duck.gain.setTargetAtTime(on ? DUCK : 1, t, 0.33); },
-    pan(v, t = ctx.currentTime) { pan.pan.setTargetAtTime(Math.max(-1, Math.min(1, v)) * A.pan, t, 0.3); },
+    out: duck, schedule, ready, info: () => ({ loaded: Object.keys(bufs).length, of: AUDIO_FILES.length, voices: played, log: log.slice(-8) }),
+    log,
+    duck(on, t = ctx.currentTime) { ducked = on; duck.gain.cancelScheduledValues(t); duck.gain.setTargetAtTime(on ? DUCK : 1, t, 0.33); },
+    pan(v, t = ctx.currentTime) { bedPan.pan.setTargetAtTime(Math.max(-1, Math.min(1, v)) * A.pan, t, 0.3); },
   };
 }
 
@@ -167,13 +146,16 @@ export function masterChain(ctx) {
   return { fade, lim, out: trim };
 }
 
-export async function renderAmbience(sec = 20, seed = 505, sr = 48000) {
+export async function renderAmbience(sec = 20, seed = 505, sr = 48000, opts = {}) {
   const ctx = new OfflineAudioContext(2, Math.floor(sec * sr), sr), rand = rng(seed);
   const m = masterChain(ctx);
   m.fade.gain.value = MASTER;
-  const a = ambience(ctx, m.fade, rand);
+  const a = ambience(ctx, m.fade, rand, (f) => loadAudio(ctx, f), opts);
+  await a.ready;
   a.schedule(0, sec);
-  return ctx.startRendering();
+  const buf = await ctx.startRendering();
+  buf.voices = a.log;
+  return buf;
 }
 
 export default function mount(live) {
@@ -237,7 +219,7 @@ export default function mount(live) {
   const filt = (type, f, q = 0.707) => { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; return b; };
   const gain = (v) => { const n = ctx.createGain(); n.gain.value = v; return n; };
 
-  let buildMs = 0, jobMs = 0;
+  let buildMs = 0, loadMs = 0;
   function build() {
     const t0 = performance.now();
     ctx = new AC({ latencyHint: 'playback' });
@@ -249,8 +231,8 @@ export default function mount(live) {
     const outside = gain(GLASS);
     outside.connect(master);
     const meter = (node) => { const a = ctx.createAnalyser(); a.fftSize = 2048; node.connect(a); return a; };
-    const q = [], run = () => { const t = performance.now(); q.shift()?.(); jobMs = Math.max(jobMs, performance.now() - t); if (q.length) setTimeout(run, 0); };
-    const amb = ambience(ctx, master, rand, (f) => { q.push(f); if (q.length === 1) setTimeout(run, 0); });
+    const amb = ambience(ctx, master, rand, (f) => loadAudio(ctx, f));
+    amb.ready.then(() => { loadMs = Math.round(performance.now() - t0); });
     const track = gain(1);
     track.connect(master);
     const saw = ctx.createOscillator(); saw.type = 'sawtooth'; saw.frequency.value = BOAT.fire;
@@ -475,7 +457,7 @@ export default function mount(live) {
         return Math.sqrt(s / g.buf.length);
       },
       info: () => ({ state: ctx?.state ?? 'none', on, wanted, panes: panes.length, geiger: !!geigerPos,
-        boat: boatNode ? 'cz_boat' : 'procedural', clicks: g?.clicks ?? 0, ducked: !!g?.ducked, buildMs: Math.round(buildMs), jobMs: Math.round(jobMs), limDb: g ? +g.lim.reduction.toFixed(2) : 0,
+        boat: boatNode ? 'cz_boat' : 'procedural', clicks: g?.clicks ?? 0, ducked: !!g?.ducked, buildMs: Math.round(buildMs), loadMs, ...(g ? g.amb.info() : {}), limDb: g ? +g.lim.reduction.toFixed(2) : 0,
         boatGain: g ? +g.boatLevel.gain.value.toFixed(3) : 0, agentDone, drivePlays }),
     },
   };
