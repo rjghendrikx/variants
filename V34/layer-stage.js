@@ -1,6 +1,9 @@
 import { noPick, seedFrom } from './layer-common.js';
 import { BARS, BPM, SECTIONS, features } from './layer-deck.js';
-import { makeFacade } from './facade-life.js';
+import { makeFacade, resolve } from './facade-life.js';
+
+const FACADE = await fetch(new URL('./facade.json', import.meta.url)).then((r) => r.json())
+  .catch((e) => { console.warn('stage: facade.json unreadable, the built-in defaults play', e); return null; });
 
 const T_IN = 3.0, T_OUT = 2.5;
 const T_STILL = 6.0;
@@ -9,6 +12,8 @@ const SIDE = 2.6;
 const OUTWARD = 0.3;
 const PROUD = 0.12;
 const RIM = [0.45, 0.4], EDGE = 0.06;
+const SKIRT = { side: 0.35, end: 0.8, down: 1.0, up: 0.8 };
+const WALL = [0.031, 0.024, 0.024], PANE = [0.026, 0.025, 0.028];
 const TAU_UP = 0.1, TAU_DOWN = 0.45;
 const BLOCK = [6, 4];
 const H_PHRASE = 32;
@@ -19,7 +24,7 @@ const RAMPS = {
   tube: [[0, [0.06, 0.05, 0.035]], [0.45, [0.62, 0.52, 0.40]], [0.8, [0.92, 0.80, 0.64]], [1, [1.0, 0.91, 0.78]]],
   home: [[0, [0.05, 0.033, 0.017]], [0.45, [0.6, 0.41, 0.22]], [0.8, [0.9, 0.62, 0.34]], [1, [1.0, 0.70, 0.40]]],
 };
-const OFFICE_RAMP = { intro: 'tube', build: 'tube', drop: 'tube', breakdown: 'tube', outro: 'tube' };
+const OFFICE_RAMP = { intro: 'office', build: 'office', drop: 'office', breakdown: 'office', outro: 'office' };
 const HOUSE_RAMP = { intro: 'home', build: 'home', drop: 'home', breakdown: 'home', outro: 'home' };
 const HOUSE_STATES = [[0.80, 0.4], [0.42, 0.25], [0.04, 0.2], [0.22, 0.15]];
 
@@ -30,16 +35,31 @@ const ad = (ph, a, d, curve) => clamp(ph < a ? ph / a : 1 - (ph - a) / d) ** cur
 function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const hash = (i, s) => fract(Math.sin(i * 12.9898 + s * 78.233) * 43758.5453);
 
-const VS = `attribute float aLevel; attribute vec4 aTone; attribute vec2 aLit; attribute vec2 aInfo;
-  uniform vec3 uDark; uniform float uK; uniform vec4 uO[4]; uniform vec4 uH[4]; varying vec3 vC; varying float vA;
+const VS = `attribute float aLevel; attribute vec4 aTone; attribute vec4 aRect; attribute vec4 aQuad; attribute vec2 aInfo; attribute float aCover;
+  uniform vec3 uDark; uniform vec3 uPane; uniform float uK; uniform float uProud; uniform vec4 uO[4]; uniform vec4 uH[4];
+  varying vec3 vC; varying float vA; varying vec2 vP; varying vec2 vR; varying vec4 vQ; varying float vCov;
   vec3 ramp(vec4 s[4], float a) { vec3 c = s[0].yzw; for (int i = 1; i < 4; i++) c = mix(c, s[i].yzw, smoothstep(s[i - 1].x, s[i].x, a)); return c; }
   void main() {
-    vec3 c = aInfo.x < 0.5 ? ramp(uO, aLevel) : ramp(uH, aLevel);
+    bool office = aInfo.x < 0.5;
+    vec3 c = office ? ramp(uO, aLevel) : ramp(uH, aLevel);
     c = mix(c, c * aTone.rgb, 0.35);   // a little of each window's own tone (the bake's bulb or tube)
-    vC = mix(uDark, c, clamp(aLevel * 2.5, 0.0, 1.0)); vA = uK * max(aTone.a, clamp(aLevel * 6.0, 0.0, 1.0));
-    vec2 s = mix(vec2(1.0), aLit, smoothstep(0.04, 0.25, aLevel));
-    gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position.xy * s, position.z, 1.0); }`;
-const FS = `varying vec3 vC; varying float vA; void main() { gl_FragColor = vec4(vC, vA); }`;
+    vC = mix(office ? uPane : uDark, c, clamp(aLevel * 2.5, 0.0, 1.0)); vA = uK * max(aTone.a, clamp(aLevel * 6.0, 0.0, 1.0));
+    vR = mix(aRect.zw, aRect.xy, smoothstep(0.04, 0.25, aLevel)); vQ = aQuad; vCov = uK * aCover;
+    vP = vec2(mix(aQuad.x, aQuad.y, position.x + 0.5), mix(aQuad.z, aQuad.w, position.y + 0.5));
+    // on the baked pane's plane, then PROUD toward the eye along the view ray: in front for the depth test, and no
+    // parallax against the bake (offset along the normal, a cover slid ~0.25 m off its pane at the University's angles)
+    vec4 wp = modelMatrix * instanceMatrix * vec4(vP, 0.0, 1.0);
+    vec3 nw = normalize(mat3(modelMatrix * instanceMatrix) * vec3(0.0, 0.0, 1.0)), e = cameraPosition - wp.xyz;
+    wp.xyz += e * (uProud / max(dot(e, nw), 1e-3));
+    gl_Position = projectionMatrix * viewMatrix * wp; }`;
+const FS = `uniform vec3 uWall; varying vec3 vC; varying float vA; varying vec2 vP; varying vec2 vR; varying vec4 vQ; varying float vCov;
+  void main() {
+    vec2 d = abs(vP) - vR;
+    if (max(d.x, d.y) <= 0.0) { gl_FragColor = vec4(vC, vA); return; }
+    if (vCov <= 0.0) discard;
+    float ex = (vP.x > 0.0 ? vQ.y : -vQ.x) - vR.x, ey = (vP.y > 0.0 ? vQ.w : -vQ.z) - vR.y;
+    float t = max(max(d.x, 0.0) / ex, max(d.y, 0.0) / ey);
+    gl_FragColor = vec4(uWall, vCov * (1.0 - smoothstep(0.45, 1.0, t))); }`;
 const TUBE = [1.0, 0.90, 0.78];
 const WARM = [[1.0, 0.55, 0.22], [1.0, 0.62, 0.32], [1.0, 0.70, 0.42], [1.0, 0.77, 0.55]];
 
@@ -69,21 +89,33 @@ export default function mount(live) {
   const mesh = noPick(new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), null, N));
   const panels = [];
   const m = new THREE.Matrix4(), c = new THREE.Vector3(), n = new THREE.Vector3(), t = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
-  const tone = new Float32Array(N * 4), lit = new Float32Array(N * 2), infoA = new Float32Array(N * 2);
+  const tone = new Float32Array(N * 4), rect = new Float32Array(N * 4), quad = new Float32Array(N * 4), cover = new Float32Array(N), infoA = new Float32Array(N * 2);
   for (let i = 0; i < N; i++) {
     const [x, y, z, nx, nz, w, h, kind, tn] = raw.slice(9 * i, 9 * i + 9);
     c.set(x, y, z).applyMatrix4(far.matrixWorld);
     n.set(nx, 0, nz).normalize();
     t.crossVectors(up, n);
+    m.makeBasis(t, up, n).setPosition(c);
     c.addScaledVector(n, PROUD);
-    m.makeBasis(t.clone().multiplyScalar(w + RIM[0]), up.clone().multiplyScalar(h + RIM[1]), n).setPosition(c);
-    lit.set([(w + EDGE) / (w + RIM[0]), (h + EDGE) / (h + RIM[1])], 2 * i);
+    const cov = kind === 0 && tn === 1, lw = (w + EDGE) / 2, lh = (h + EDGE) / 2;
+    rect.set(cov ? [lw, lh, lw, lh] : [lw, lh, (w + RIM[0]) / 2, (h + RIM[1]) / 2], 4 * i);
+    quad.set(cov ? [-w / 2 - SKIRT.side, w / 2 + SKIRT.side, -h / 2 - SKIRT.down, h / 2 + SKIRT.up] : [-(w + RIM[0]) / 2, (w + RIM[0]) / 2, -(h + RIM[1]) / 2, (h + RIM[1]) / 2], 4 * i);
+    cover[i] = cov ? 1 : 0;
     mesh.setMatrixAt(i, m);
     tone.set([...(kind === 0 ? TUBE : WARM[tn]), kind === 1 || tn === 1 ? 1 : 0], 4 * i);
     const d = c.clone().sub(winC);
     panels.push({ pos: c.clone(), kind, az: Math.atan2(d.x, -d.z), el: Math.atan2(d.y, Math.hypot(d.x, d.z)), y: c.y,
-      u: 0, v: 0, r: 0, f: 0, c: 0, g: 0, both: false });
+      u: 0, v: 0, r: 0, f: 0, c: 0, g: 0, both: false, t: t.clone(), w });
   }
+  const at = new Map(), key = (p) => `${Math.round(p.x)},${Math.round(p.y)},${Math.round(p.z)}`;
+  panels.forEach((p, i) => { if (p.kind === 0) { const k = key(p.pos); at.set(k, [...(at.get(k) || []), i]); } });
+  const nextTo = (p, sgn) => { const q = p.pos.clone().addScaledVector(p.t, sgn * (p.w + 0.4));
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++)
+      for (const j of at.get(`${Math.round(q.x) + dx},${Math.round(q.y) + dy},${Math.round(q.z) + dz}`) || []) if (panels[j].pos.distanceTo(q) < 0.3) return true;
+    return false; };
+  panels.forEach((p, i) => { if (!cover[i]) return;
+    if (!nextTo(p, -1)) quad[4 * i] = -p.w / 2 - SKIRT.end;
+    if (!nextTo(p, 1)) quad[4 * i + 1] = p.w / 2 + SKIRT.end; });
   const G = { cols: 1, rows: 1 };
   for (const kind of [0, 1]) {
     const ps = panels.filter((p) => p.kind === kind);
@@ -120,8 +152,10 @@ export default function mount(live) {
   const NBX = Math.ceil(NC / BLOCK[0]);
   const blockOf = Int32Array.from({ length: NCELL }, (_, k) => Math.floor((k % NC) / BLOCK[0]) + Math.floor(Math.floor(k / NC) / BLOCK[1]) * NBX);
   const NBLK = NBX * Math.ceil(NF / BLOCK[1]);
-  const classic = params.has('classic');
-  const life = classic ? null : makeFacade({ W: NC, H: NF, seed: seedFrom(params, 606), bpm: BPM, sections: SECTIONS });
+  const preset = resolve(FACADE, params.get('facade'));
+  const classic = params.has('classic') || preset.mode === 'classic';
+  const life = classic ? null : makeFacade({ W: NC, H: NF, seed: seedFrom(params, 606), bpm: BPM, sections: SECTIONS, preset });
+  RAMPS.office = RAMPS.tube.map(([st, c], j) => [st, c.map((v, q) => v + (RAMPS.home[j][1][q] - v) * clamp(preset.warmth || 0))]);
   const houseBias = life ? Float32Array.from({ length: BARS * 4 + 64 }, (_, i) => life.houseBias(i)) : null;
   let stillF = null, gOs = 1, inView = true;
   const sphere = new THREE.Sphere().setFromPoints(offices.map((i) => panels[i].pos));
@@ -209,10 +243,12 @@ export default function mount(live) {
   level.setUsage(THREE.DynamicDrawUsage);
   mesh.geometry.setAttribute('aLevel', level);
   mesh.geometry.setAttribute('aTone', new THREE.InstancedBufferAttribute(tone, 4));
-  mesh.geometry.setAttribute('aLit', new THREE.InstancedBufferAttribute(lit, 2));
+  mesh.geometry.setAttribute('aRect', new THREE.InstancedBufferAttribute(rect, 4));
+  mesh.geometry.setAttribute('aQuad', new THREE.InstancedBufferAttribute(quad, 4));
+  mesh.geometry.setAttribute('aCover', new THREE.InstancedBufferAttribute(cover, 1));
   mesh.geometry.setAttribute('aInfo', new THREE.InstancedBufferAttribute(infoA, 2));
   const stops = (name) => RAMPS[name].map(([s, [r, g, b]]) => new THREE.Vector4(s, r, g, b));
-  const U = { uK: { value: 0 }, uDark: { value: new THREE.Vector3(...DARK) }, uO: { value: stops('tube') }, uH: { value: stops('home') } };
+  const U = { uK: { value: 0 }, uProud: { value: PROUD }, uDark: { value: new THREE.Vector3(...DARK) }, uPane: { value: new THREE.Vector3(...PANE) }, uWall: { value: new THREE.Vector3(...WALL) }, uO: { value: stops('office') }, uH: { value: stops('home') } };
   mesh.material = new THREE.ShaderMaterial({ uniforms: U, vertexShader: VS, fragmentShader: FS, transparent: true, depthWrite: false,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8 });
   mesh.name = 'stage_windows';
@@ -220,7 +256,7 @@ export default function mount(live) {
   mesh.visible = false;
   mesh.instanceMatrix.needsUpdate = true;
   scene.add(mesh);
-  let rampO = 'tube', rampH = 'home';
+  let rampO = 'office', rampH = 'home';
   const setRamp = (u, name, cur) => { if (name !== cur) U[u].value = stops(name); return name; };
 
   const keepMask = Uint8Array.from({ length: N }, (_, i) => (hash(i, 99) < GOVERN.keep ? 1 : 0));
@@ -375,7 +411,7 @@ export default function mount(live) {
       info: () => ({ on: forced || !!deck()?.playing, near, forced, uniOnly, deck: !!deck()?.playing, k: +k.toFixed(3), beat: +(deck()?.playing ? deck().beat : b).toFixed(2),
         visible: mesh.visible, settled, seen, panels: N, university: offices.length, houses: houses.length, cols: NC, floors: NF,
         pattern: lastF ? `${lastF.kind} ${lastF.secBeat.toFixed(1)}/${lastF.secLen}` : 'none', ramps: [rampO, rampH],
-        held: [gov[0].held, gov[1].held], mode: life ? 'life' : 'classic', inView,
+        held: [gov[0].held, gov[1].held], mode: life ? 'life' : 'classic', preset: classic ? 'classic' : preset.name, inView,
         life: life ? { ...life.stats, E: +life.stats.E.toFixed(3), hum: +life.stats.hum.toFixed(4), mean: +life.stats.mean.toFixed(4) } : null }),
     },
   };

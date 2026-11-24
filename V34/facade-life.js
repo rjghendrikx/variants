@@ -7,6 +7,27 @@ const PATCH = [4, 6], EV_MAX = 4, AREA = 0.25, GAIN = 1.5, THRESH = 0.1;
 const REST = 0.5;
 const AFTER = [0.7, 1.0];
 const CAP = 0.3;
+export const DEFAULTS = {
+  mode: 'life',
+  density: 1,
+  attack: TAU_UP, decay: TAU_DOWN, decay_late: TAU_DOWN_LATE,
+  afterglow: 1,
+  warmth: 0,
+  rate: { intro: [2, 6], build: [6, 70], drop1: [260, 110], drop: [330, 140], breakdown: 4, outro: [35, 2] },
+  cluster: 3,
+  crackle: 0.09,
+  spread: [8, 2.5],
+  pulse: 2,
+  peak: 0.95,
+  front: [0.22, 0.35],
+  hum: 0.12,
+  hold_glow: 0.3,
+};
+export function resolve(json, name) {
+  const ps = json?.presets || {}, key = name && ps[name] ? name : json?.active && ps[json.active] ? json.active : null;
+  const p = key ? ps[key] : {}, rate = { ...DEFAULTS.rate, ...(p.rate || {}) };
+  return { ...DEFAULTS, ...p, rate, name: key || 'v34' };
+}
 const clamp = (v, a = 0, b = 1) => (v < a ? a : v > b ? b : v);
 const sm = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
 function mulberry(seed) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -196,9 +217,107 @@ function makeSystem(W, H, WY) {
       const d = dF[i];
       const edge = clamp(1 - d / Rh + 0.4 * s.voice[i] + 0.2 * s.own[i]) ** 1.5;
       const hm = s.E > 0.01 ? amp * edge * (1 - depth + depth * (0.5 + 0.5 * Math.cos(TAU * s.hp[i])) ** 2) : 0;
-      let v = Math.min(1, (hold ? 0.35 : 1) * Math.max(s.lvl[i], s.gh[i] * 0.55) + hm);
+      let v = Math.min(1, (hold ? 0.35 : 1) * Math.max(s.lvl[i], s.gh[i] * 0.55 * k.afterglow) + hm);
       if (cap) v *= 0.12 + 0.88 * clamp(1.6 - 1.2 * d / (capR * (1 + 0.25 * s.voice[i])));
       out[i] = v; hum += hm;
+    }
+    s.hum = hum / N;
+  }
+  return { s, reset, step, render, drop, dist };
+}
+
+function makeSparks(W, H, WY, c) {
+  const N = W * H, S = W / 24, A = () => new Float64Array(N), QN = 1024;
+  const s = { W, H, N, t: 0, fx: 0, fy: 0, tx: 0, ty: 0, E: 0, holdT: 0, after: 0, dropT: -9, latch: 0, R: 10 * S, hold: false, cap: 0, selfDrop: 0, fires: 0, hum: 0, b: 0,
+    lvl: A(), pt: A(), ref: A(), gh: A(), front: A(), dF: A(), amp: A(), voice: A(),
+    qT: new Float64Array(QN), qJ: new Int32Array(QN), qN: 0, rate: 0 };
+  const X = new Int16Array(N), Y = new Int16Array(N);
+  for (let i = 0; i < N; i++) { X[i] = i % W; Y[i] = (i / W) | 0; }
+  let rng = Math.random;
+  const dist = (i) => Math.hypot(X[i] - s.fx, (Y[i] - s.fy) * WY);
+  function reset(seed, b = 0) {
+    rng = mulberry(seed);
+    Object.assign(s, { t: 0, E: 0, holdT: 0, after: 0, dropT: -9, latch: 0, hold: false, cap: 0, selfDrop: 0, qN: 0 });
+    s.fx = s.tx = W / 2 + (rng() - 0.5) * W * (1 - b); s.fy = s.ty = H / 2 + (rng() - 0.5) * H * (1 - b);
+    for (let i = 0; i < N; i++) { s.lvl[i] = 0; s.pt[i] = 0; s.ref[i] = 0; s.gh[i] = 0; s.front[i] = -1; s.voice[i] = rng(); }
+  }
+  function pop(j, a = c.peak) {
+    if (s.ref[j] > 0) return false;
+    s.amp[j] = a * (0.75 + 0.25 * rng()); s.pt[j] = c.pulse * STEP - 1e-6; s.ref[j] = REST * (1 + 0.4 * rng()); s.fires++;
+    return true;
+  }
+  function cluster(j, b) {
+    if (!pop(j)) return;
+    const n = Math.max(0, Math.round(c.cluster * (0.5 + rng())) - 1), gap = c.crackle * (1 - 0.5 * b);
+    let x = X[j], y = Y[j], t = s.t;
+    for (let m = 0; m < n && s.qN < QN; m++) {
+      t += gap * (0.5 + rng());
+      if (rng() < 0.8) x = clamp(x + (rng() < 0.5 ? -1 : 1) * (1 + (rng() < 0.3 ? 1 : 0)), 0, W - 1); else y = clamp(y + (rng() < 0.5 ? -1 : 1), 0, H - 1);
+      s.qT[s.qN] = t; s.qJ[s.qN] = y * W + x; s.qN++;
+    }
+  }
+  function drop(after, cap) {
+    const v = 20 * S, capR = CAP * W;
+    for (let i = 0; i < N; i++) { const d = dist(i);
+      s.front[i] = (cap && d > capR * (1 + 0.25 * s.voice[i])) || rng() > c.front[cap ? 0 : 1] * (1 + 0.6 * Math.min(1, s.E) * Math.exp(-d / (8 * S))) ? -1 : s.t + d / v + 0.06 * rng(); }
+    s.dropT = s.t; s.latch = 1; s.after = after; s.E = 0; s.holdT = 0; s.cap = cap ? 1 : 0; s.qN = 0;
+  }
+  const lerp = (r, u) => (Array.isArray(r) ? r[0] + (r[1] - r[0]) * u : r);
+  function step(dt, clock, k) {
+    s.t += dt;
+    const bRaw = k.build, b = Math.min(1, bRaw), spb = 60 / clock.bpm;
+    s.after = Math.max(0, s.after - dt / (8 * 4 * spb));
+    if (bRaw < 0.9) s.latch = 0;
+    const hold = (bRaw >= 0.965 && !s.latch) || !!k.forceHold;
+    s.holdT = hold ? s.holdT + dt : 0;
+    if (s.holdT > 2 * 4 * spb) s.selfDrop = 1;
+    if (!k.forceHold) { const bc = b * (k.charge ?? 1); s.E = clamp(s.E + dt * (0.075 * bc - (b < 0.05 ? 0.25 : 0.01) * s.E)); }
+    if (rng() < dt * (0.06 + 0.45 * k.wild) * (1 - 0.9 * b)) { const L = Math.min(16 * S, 1.6 * S / Math.pow(rng() + 0.02, 0.7)), a = rng() * TAU; s.tx = clamp(s.tx + L * Math.cos(a), 0, W - 1); s.ty = clamp(s.ty + 0.5 * L / WY * Math.sin(a), 0, H - 1); }
+    const settle = dt * (0.25 * b + 1.5 * sm(0.7, 0.95, b));
+    s.tx += (W / 2 - s.tx) * settle; s.ty += (H / 2 - s.ty) * settle;
+    const sp = Math.min(1, dt * (0.5 + 2 * b)); s.fx += (s.tx - s.fx) * sp; s.fy += (s.ty - s.fy) * sp;
+    for (let i = 0; i < N; i++) { s.ref[i] -= dt; s.dF[i] = dist(i); }
+    const R = c.rate, u = k.u ?? 0;
+    let rate = k.kind === 'intro' ? lerp(R.intro, u) : k.kind === 'build' ? lerp(R.build, b) : k.kind === 'drop' ? lerp(k.n === 0 ? R.drop1 : R.drop, 1 - s.after / AFTER[Math.min(k.n ?? 0, 1)])
+      : k.kind === 'breakdown' ? lerp(R.breakdown, u) : lerp(R.outro, u);
+    rate *= c.density;
+    s.rate = hold ? 0 : rate;
+    if (hold) s.qN = 0;
+    else {
+      let m = 0;
+      for (let e = 0; e < s.qN; e++) { if (s.qT[e] <= s.t) pop(s.qJ[e]); else { s.qT[m] = s.qT[e]; s.qJ[m] = s.qJ[e]; m++; } }
+      s.qN = m;
+      const spread = (k.kind === 'build' ? lerp(c.spread, b) : k.kind === 'drop' ? lerp(c.spread, 0.2) : c.spread[0]) * S;
+      for (let n = 0, lam = rate * dt; n < 12; n++) {
+        if (rng() >= lam) break; lam -= 1;
+        let j = -1;
+        for (let tries = 0; tries < 3 && j < 0; tries++) {
+          let x, y;
+          if (k.kind === 'intro' || k.kind === 'breakdown' || k.kind === 'outro') { x = Math.floor(rng() * W); y = Math.floor(rng() * H); }
+          else { const r = spread * Math.sqrt(-2 * Math.log(rng() + 1e-9)), a = rng() * TAU; x = Math.round(clamp(s.fx + r * Math.cos(a), 0, W - 1)); y = Math.round(clamp(s.fy + r * Math.sin(a) / WY, 0, H - 1)); }
+          j = y * W + x; if (s.cap && k.cap && s.dF[j] > CAP * W) j = -1;
+        }
+        if (j >= 0) cluster(j, b);
+      }
+    }
+    if (s.dropT >= 0 && s.t - s.dropT < Math.hypot(W, H * WY) / (20 * S) + 0.4) for (let i = 0; i < N; i++) if (s.front[i] >= 0 && s.t >= s.front[i]) { s.front[i] = -1; s.ref[i] = 0; pop(i, Math.min(1, c.peak * 1.05)); }
+    const dG = Math.exp(-dt / 0.6);
+    for (let i = 0; i < N; i++) {
+      if (s.pt[i] > 0) { s.pt[i] -= dt; s.lvl[i] = s.amp[i]; } else s.lvl[i] = 0;
+      s.gh[i] = c.afterglow > 0 ? Math.max(s.gh[i] * dG, s.lvl[i] * 0.25 * c.afterglow) : 0;
+    }
+    s.R = (10 - 4 * sm(0.3, 0.95, b)) * S; s.b = b; s.hold = hold;
+    if (s.selfDrop) { s.selfDrop = 0; drop(0.85, 0); }
+  }
+  function render(out, k) {
+    const hold = s.hold, Rh = hold ? Math.max(5 * S, s.R * (1 - 0.6 * Math.min(1, s.holdT / 1.4))) : s.R;
+    const g = hold ? c.hold_glow * (0.5 + 0.5 * Math.min(1, s.holdT / 0.5)) : c.hum * s.E;
+    let hum = 0;
+    for (let i = 0; i < N; i++) {
+      const edge = g > 0.001 ? clamp(1 - s.dF[i] / Rh + 0.3 * (s.voice[i] - 0.5)) ** 2 : 0, hm = g * edge;
+      let v = Math.max(s.lvl[i], s.gh[i]) + hm;
+      if (k.cap && s.cap) v *= 0.12 + 0.88 * clamp(1.6 - 1.2 * s.dF[i] / (CAP * W * (1 + 0.25 * s.voice[i])));
+      out[i] = Math.min(1, v); hum += hm;
     }
     s.hum = hum / N;
   }
@@ -221,8 +340,9 @@ function makeReveal(N) {
   return { apply, reset() { st.m = 0.05; st.T = 0; } };
 }
 
-export function makeFacade({ W, H, seed = 1, bpm, sections, wy = 2.0 }) {
-  const N = W * H, sys = makeSystem(W, H, wy), rev = makeReveal(N), score = makeScore(bpm, sections), spb = 60 / bpm;
+export function makeFacade({ W, H, seed = 1, bpm, sections, wy = 2.0, preset = {} }) {
+  const c = { ...DEFAULTS, ...preset, rate: { ...DEFAULTS.rate, ...(preset.rate || {}) } }, sparks = c.mode === 'sparks';
+  const N = W * H, sys = sparks ? makeSparks(W, H, wy, c) : makeSystem(W, H, wy), rev = makeReveal(N), score = makeScore(bpm, sections), spb = 60 / bpm;
   const clk = { beat: 0, bpm }, raw = new Float32Array(N), tgt = new Float32Array(N), L = new Float32Array(N), k = {};
   const last = new Float32Array(N), dirn = new Int8Array(N), cand = new Int8Array(N), blk = new Uint8Array(N), Lprev = new Float32Array(N);
   const [pr, pc] = [Math.min(PATCH[0], H), Math.min(PATCH[1], W)], PX = W - pc + 1, PY = H - pr + 1, NP = PX * PY + 1;
@@ -268,7 +388,7 @@ export function makeFacade({ W, H, seed = 1, bpm, sections, wy = 2.0 }) {
     stats.jumps++;
   }
   function tick(B, low) {
-    score.knobs(B, k);
+    score.knobs(B, k); k.afterglow = c.afterglow;
     const s = sys.s;
     const d = score.drops.findIndex((x) => tickB < x && x <= B);
     if (d >= 0) { sys.drop(AFTER[Math.min(d, 1)], d === 0); }
@@ -279,9 +399,9 @@ export function makeFacade({ W, H, seed = 1, bpm, sections, wy = 2.0 }) {
     clk.beat = B; sys.step(STEP, clk, k);
     if (lowHeld && s.latch && !selfDone && s.dropT === s.t) selfDone = true;
     sys.render(raw, k);
-    rev.apply(raw, tgt, STEP, k.dens);
-    const late = k.kind === 'build' ? sm(0.8, 0.9, k.build) : 0, td = TAU_DOWN + (TAU_DOWN_LATE - TAU_DOWN) * late;
-    const ka = 1 - Math.exp(-STEP / TAU_UP), kd = 1 - Math.exp(-STEP / td);
+    if (sparks) tgt.set(raw); else rev.apply(raw, tgt, STEP, c.density === 1 ? k.dens : clamp(k.dens * c.density));
+    const late = k.kind === 'build' ? sm(0.8, 0.9, k.build) : 0, td = c.decay + (c.decay_late - c.decay) * late;
+    const ka = 1 - Math.exp(-STEP / c.attack), kd = 1 - Math.exp(-STEP / td);
     Lprev.set(L);
     let mean = 0, lit = 0;
     for (let i = 0; i < N; i++) { const t = tgt[i], c = L[i]; L[i] = c + (t - c) * (t > c ? ka : kd); }
@@ -292,7 +412,7 @@ export function makeFacade({ W, H, seed = 1, bpm, sections, wy = 2.0 }) {
     tickB = B;
   }
   return {
-    N, L, score, stats, sys,
+    N, L, score, stats, sys, preset: c,
     frame(dt, B, low = 1) {
       if (jumpNext || Math.abs(B - (prevB + dt / spb)) > 0.5) { resync(B); jumpNext = false; }
       prevB = B; acc += dt;
@@ -302,9 +422,13 @@ export function makeFacade({ W, H, seed = 1, bpm, sections, wy = 2.0 }) {
     },
     jump() { jumpNext = true; },
     still() {
+      if (sparks) {
+        resync(136); for (let n = 0; n < 30; n++) tick(136 + n * STEP / spb, 1);
+        const out = Float32Array.from(L, (v) => 0.85 * v); jumpNext = true; return out;
+      }
       sys.reset(seed >>> 0, 1); const s = sys.s; s.E = 0.4; s.R = 8 * W / 24; s.hold = false;
       for (let i = 0; i < N; i++) { s.hp[i] = 0; s.dF[i] = sys.dist(i); }
-      sys.render(raw, { cap: 0 });
+      sys.render(raw, { cap: 0, afterglow: c.afterglow });
       let mx = 1e-6; for (let i = 0; i < N; i++) mx = Math.max(mx, raw[i]);
       const a = Float32Array.from(raw).sort(), T = a[Math.floor(0.5 * N)];
       const out = new Float32Array(N);
