@@ -4,7 +4,7 @@ const STORE_KEY = 'room.sound';
 const MASTER = 0.6;
 const FADE_IN = 0.9, FADE_OUT = 0.35;
 const GLASS = 0.35;
-const DUCK = 0.6;
+const DUCK = 0.4;
 const AMB = {
   level: 0.8,
   bed: {

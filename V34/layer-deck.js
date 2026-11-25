@@ -47,7 +47,7 @@ export function features(beat, low = 1) {
 }
 
 const LOOK = 0.25;
-const LEVEL = 0.5;
+const LEVEL = 0.65;
 const LIFT = 0.0012;
 const CAP = [0.018, 0.010, 0.011];
 const CANVAS = [512, 576];

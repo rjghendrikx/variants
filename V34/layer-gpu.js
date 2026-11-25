@@ -142,7 +142,7 @@ export default function mount(live) {
       row.innerHTML = '<span class="n"></span> <span class="u">tokens/s</span>';
       const s = Object.assign(document.createElement('p'), { className: 's' });
       const note = Object.assign(document.createElement('p'), { className: 'note',
-        textContent: `A replay of the measured bench, not a live model: decode at ${BENCH.ctx} context.` });
+        textContent: `Decode at ${BENCH.ctx} context: the measured run, replayed.` });
       row.setAttribute('aria-hidden', 'true'); s.setAttribute('aria-hidden', 'true');
       const said = Object.assign(document.createElement('span'), { className: 'vh',
         textContent: `Decode speed: ${fmt(BENCH.off)} tokens a second without speculative decoding, ${fmt(BENCH.on)} with it, +${BENCH.gain}%.` });

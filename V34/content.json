@@ -41,7 +41,7 @@
     "in": "pc",
     "kicker": "His own work",
     "title": "Local inference on the 3090",
-    "text": "A 27-billion-parameter model, quantised to fit one 24 GB card, driving an agent harness, benchmarked before it was believed. Speculative decoding: 30.0 to 43.2 tokens a second (+44%). Without it, 144K tokens is the last context that fits, at 23.2 GiB."
+    "text": "A coding agent that runs on his own desk. A 27-billion-parameter model on one 24 GB card, driving an agent harness, measured before it was trusted: 43 tokens a second at 55K context, fast enough to work with. Speculative decoding bought the last 44% (30.0 to 43.2). Without it the card holds 144K tokens of context, at 23.2 GiB."
    },
    {
     "case": "metal",
@@ -225,7 +225,7 @@
    },
    {
     "title": "A drop on the glass",
-    "text": "Watch a drop run down the glass. David Abram, in a talk on sensing: “We cannot even predict just how that drop is going to fall.” Science calls that chaotic, which sounds like out of control. Abram: they are “not out of control, but they are out of our control. That is to say, a much better word for what they mean is wild.”"
+    "text": "Watch a drop run down the glass. David Abram: “We cannot even predict just how that drop is going to fall.” Science calls that chaotic; Abram: not “out of control”, but “out of our control. That is to say, a much better word for what they mean is wild.”"
    }
   ]
  },
@@ -511,7 +511,7 @@
    {
     "kicker": "His own · local inference",
     "title": "RTX 3090",
-    "body": "A 27-billion-parameter model on one 24 GB card, driving an agent harness. Speculative decoding: +44%, 30.0 to 43.2 tokens a second, measured before believed."
+    "body": "A coding agent that runs on his own desk: a 27-billion-parameter model on one 24 GB card, measured before it was trusted. 43 tokens a second at 55K context; speculative decoding bought the last 44%."
    }
   ],
   [
@@ -539,7 +539,7 @@
    {
     "kicker": "At the window",
     "title": "A drop on the glass",
-    "body": "Watch a drop run down the glass. David Abram, in a talk on sensing: “We cannot even predict just how that drop is going to fall.” Science calls that chaotic, which sounds like out of control. Abram: they are “not out of control, but they are out of our control. That is to say, a much better word for what they mean is wild.”"
+    "body": "Watch a drop run down the glass. David Abram: “We cannot even predict just how that drop is going to fall.” Science calls that chaotic; Abram: not “out of control”, but “out of our control. That is to say, a much better word for what they mean is wild.”"
    }
   ],
   [
