@@ -77,8 +77,10 @@ const STYLE = `
   .led-ui .chips span { min-height: 36px; }
   .led-ui input[type=range] { min-height: 32px; }
   .led-ui .watch { min-height: 44px; }
-  body.led-open :is(.case, .hs-card) { display: none; }
-}`;
+}
+/* Ruud 2026-11-25: not too many text blocks at once; while the panel is open it is the only one (its x, Esc and Back
+   to the room still close it) */
+body.led-open :is(.case, .hs-card, .caption, .nav-hint) { display: none; }`;
 
 export default function mount(live) {
   const { THREE, byName, camera, params } = live;

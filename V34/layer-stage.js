@@ -45,7 +45,7 @@ const VS = `attribute float aLevel; attribute vec4 aTone; attribute vec4 aRect; 
     bool office = aInfo.x < 0.5;
     vec3 c = office ? ramp(uO, aLevel) : ramp(uH, aLevel);
     c = mix(c, c * aTone.rgb, 0.35);   // a little of each window's own tone (the bake's bulb or tube)
-    vC = mix(office ? uPane : uDark, c, clamp(aLevel * 2.5, 0.0, 1.0)); vA = uK * max(aTone.a, clamp(aLevel * 6.0, 0.0, 1.0));
+    vC = mix(office ? uPane : uDark, c, clamp(aLevel * 2.5, 0.0, 1.0)); vA = uK * (office ? 1.0 : max(aTone.a, clamp(aLevel * 6.0, 0.0, 1.0)));
     vR = mix(aRect.zw, aRect.xy, smoothstep(0.04, 0.25, aLevel)); vQ = aQuad; vCov = uK * aCover;
     vP = vec2(mix(aQuad.x, aQuad.y, position.x + 0.5), mix(aQuad.z, aQuad.w, position.y + 0.5));
     // on the baked pane's plane, then PROUD toward the eye along the view ray: in front for the depth test, and no

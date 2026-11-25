@@ -19,7 +19,7 @@
   "hold_glow": "sparks: the core's glow in the held breath (0: dark and still)",
   "interior": "0 a flat lit pane (v34), 1 the full room behind each lit office: its ceiling light, walls, a desk or a shelf; render only, an office that is off stays dark"
  },
- "active": "vonken-ijl",
+ "active": "vonken",
  "presets": {
   "v34": {
    "label": "v34, zoals nu",
