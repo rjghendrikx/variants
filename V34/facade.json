@@ -1,7 +1,9 @@
 {
  "_how": "The University's light show (web/facade-life.js). 'active' is what the room plays; ?facade=<name> tries another. Edit, then restage: uv run --project room python room/tools/restage.py --to <NAME> (about 2 s, no Blender, no bake). Try them side by side: facade-choose.html next to the page. A knob left out takes its default (facade-life.js DEFAULTS, which are v34).",
  "_knobs": {
-  "mode": "'life' (v34's system) or 'sparks' (firecrackers)",
+  "mode": "'life' (v34's system), 'sparks' (firecrackers), or a field from the LED panel (layer-ledmatrix.js): 'breathe', 'wave', 'bloom'",
+  "speed": "fields: the field's clock, 0.25-1.5 (1 = lume-machine's own rate)",
+  "mapping": "fields: which coordinate of the index the field reads: 'grid' (the index order), 'cartesian' (x + y), 'polar' (the radius)",
   "density": "fewer or more lit windows: life scales the reveal, sparks scales every rate (1 = as designed)",
   "attack": "s, how fast a window lights",
   "decay": "s, how fast it goes dark again (decay_late: at the build's top)",

@@ -185,11 +185,6 @@
     "text": "A cabinet of curiosities: things he keeps for what they make him think about."
    },
    {
-    "only": "rule30led",
-    "title": "LED matrix",
-    "text": "A grid of squares, each with a live alpha: the core of his Metal visuals engine, the successor to an old Quartz Composer workflow for TVs and LED walls. Tonight it shows rule 30: one simple rule, and no shortcut to what comes next."
-   },
-   {
     "only": "specimens",
     "title": "Planarian, two heads",
     "text": "Michael Levin’s lab briefly disturbed a cut flatworm’s bioelectric signalling, and it regrew with two heads. Cut again, untreated, it grew two heads again."
@@ -432,15 +427,7 @@
    {
     "kicker": "Light",
     "title": "LED matrix",
-    "body": "A grid of squares, each with a live alpha: the core of his Metal visuals engine, the successor to an old Quartz Composer workflow for TVs and LED walls."
-   }
-  ],
-  [
-   "ledmatrix_rule30",
-   {
-    "kicker": "Light",
-    "title": "LED matrix",
-    "body": "A grid of squares, each with a live alpha: the core of his Metal visuals engine, the successor to an old Quartz Composer workflow for TVs and LED walls. Tonight it shows rule 30: one simple rule, and no shortcut to what comes next."
+    "body": "A grid of 256 squares, each with a live alpha: the core of his Metal visuals engine, which sends values, not pixels. Its parameters open beside it, and the facade opposite can follow them."
    }
   ],
   [

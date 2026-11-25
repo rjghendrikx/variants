@@ -149,7 +149,7 @@
   <h1>A room built by agents, <em>held to measurements</em></h1>
   <p class="lede">The room on the front page is the front room of a canal house at night, with a desk, a cabinet and the instruments of a physicist who became an AI engineer. Nobody modelled it by hand. Claude agents wrote the Python that builds every object in Blender, Blender bakes the light, and three.js draws the result in your browser, on a phone as well as on a desktop.</p>
   <p>Ruud Hendrikx sets the direction, makes the calls and judges the result. The practice: automated gates and an outside review panel on everything, and his own read of the code where it is new in kind or touches security and privacy. This page is the method section: what was built, under which constraints, how it was checked, and what did not work.</p>
-  <p class="abstract"><b>In short.</b> <span data-k="commits">463</span> commits over <span data-k="days">41</span> days, in <span data-k="rounds">35</span> numbered rounds. The room downloads in <span data-fig="mb">6.9</span> MB of an 8 MB budget; its model draws in <span data-fig="draws">49</span> calls of 60 and holds <span data-fig="tris">106,061</span> triangles of 150,000. A gate script of <span data-k="gates">27</span> gates decides when a change is done; a review panel whose members never built what they judge decides what to change next.</p>
+  <p class="abstract"><b>In short.</b> <span data-k="commits">467</span> commits over <span data-k="days">42</span> days, in <span data-k="rounds">35</span> numbered rounds. The room downloads in <span data-fig="mb">6.9</span> MB of an 8 MB budget; its model draws in <span data-fig="draws">49</span> calls of 60 and holds <span data-fig="tris">106,061</span> triangles of 150,000. A gate script of <span data-k="gates">27</span> gates decides when a change is done; a review panel whose members never built what they judge decides what to change next.</p>
 </div>
 <section class="col" aria-labelledby="h-built">
   <h2 id="h-built"><span class="n">01</span>What was built, under which constraints</h2>
@@ -183,7 +183,7 @@
     <li><strong>Ruud decides what is right.</strong> Direction, taste and every call that cannot be undone are his. When the panel and his taste disagree, his taste wins: he picks the direction, the panel ranks the execution.</li>
   </ol>
   <h3 id="h-gates">What a gate proves</h3>
-  <p>The gate script runs <span data-k="gates">27</span> gates with <span data-k="checks">193</span> checks written into <span data-k="gates_lines">4,143</span> lines of Python. It drives a real Chrome through Playwright, on a desktop window and an emulated iPhone, and reads the page the way a visitor meets it. A selection:</p>
+  <p>The gate script runs <span data-k="gates">27</span> gates with <span data-k="checks">195</span> checks written into <span data-k="gates_lines">4,178</span> lines of Python. It drives a real Chrome through Playwright, on a desktop window and an emulated iPhone, and reads the page the way a visitor meets it. A selection:</p>
   <div class="tablewrap">
   <table class="stack">
     <thead><tr><th scope="col">Kind</th><th scope="col">The gate proves</th><th scope="col">It passes when</th></tr></thead>
@@ -213,14 +213,14 @@
 <section class="col" aria-labelledby="h-numbers">
   <h2 id="h-numbers"><span class="n">03</span>The numbers</h2>
   <dl class="numbers">
-    <div><dt>commits on the room</dt><dd data-k="commits">463</dd></div>
-    <div><dt>days from the first commit, <span data-k="active_days">21</span> of them with commits</dt><dd data-k="days">41</dd></div>
+    <div><dt>commits on the room</dt><dd data-k="commits">467</dd></div>
+    <div><dt>days from the first commit, <span data-k="active_days">22</span> of them with commits</dt><dd data-k="days">42</dd></div>
     <div><dt>numbered rounds</dt><dd data-k="rounds">35</dd></div>
     <div><dt>object modules in Python</dt><dd data-k="objects">87</dd></div>
-    <div><dt>lines of Python · JavaScript</dt><dd><span data-k="py_lines">21,650</span> <small>· <span data-k="js_lines">10,161</span></small></dd></div>
-    <div><dt>gates in use · checks written</dt><dd><span data-k="gates">27</span> <small>· <span data-k="checks">193</span></small></dd></div>
+    <div><dt>lines of Python · JavaScript</dt><dd><span data-k="py_lines">21,685</span> <small>· <span data-k="js_lines">10,507</span></small></dd></div>
+    <div><dt>gates in use · checks written</dt><dd><span data-k="gates">27</span> <small>· <span data-k="checks">195</span></small></dd></div>
   </dl>
-  <p class="asof"><span data-k="asof">Figures read from the repository at commit 8a5756f, 24 November 2026.</span> Not every object module is in this room: earlier rounds built instruments that later left it. The room’s own budgets are in the first table.</p>
+  <p class="asof"><span data-k="asof">Figures read from the repository at commit 0fbeafb, 25 November 2026.</span> Not every object module is in this room: earlier rounds built instruments that later left it. The room’s own budgets are in the first table.</p>
 </section>
 <section class="col" aria-labelledby="h-decisions">
   <h2 id="h-decisions"><span class="n">04</span>Decisions that mattered</h2>

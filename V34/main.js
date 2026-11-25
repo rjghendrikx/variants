@@ -10,7 +10,7 @@ const params = new URLSearchParams(location.search);
 const GATE = params.has('gate');
 const GLASS = !params.has('noglass');
 const LIVE = !params.has('nolive');
-const LAYERS = ['layer-terminal.js', 'layer-projector.js', 'layer-chamber.js', 'layer-geiger.js', 'layer-eraser.js', 'layer-rain.js', 'layer-water.js', 'layer-audio.js', 'layer-hotspots.js', 'layer-tags.js', 'layer-walk.js', 'layer-lidar.js', 'layer-deck.js', 'layer-books.js', 'layer-stage.js', 'layer-c64.js', 'layer-hypercard.js', 'layer-tape.js', 'layer-intro.js', 'layer-gpu.js'];
+const LAYERS = ['layer-terminal.js', 'layer-projector.js', 'layer-chamber.js', 'layer-geiger.js', 'layer-eraser.js', 'layer-rain.js', 'layer-water.js', 'layer-audio.js', 'layer-hotspots.js', 'layer-tags.js', 'layer-walk.js', 'layer-lidar.js', 'layer-deck.js', 'layer-books.js', 'layer-stage.js', 'layer-ledmatrix.js', 'layer-c64.js', 'layer-hypercard.js', 'layer-tape.js', 'layer-intro.js', 'layer-gpu.js'];
 const POLARIZER = (L) => (L.eraser?.info().inBeam ? 'Take the polarizer out' : 'Insert the polarizer');
 const WORK = Object.fromEntries(Object.entries(C.work_room).map(([id, room]) => [id, { room, acts: [] }]));
 function workCase(id, { room, acts }, el = null) {
@@ -37,7 +37,8 @@ const OWN = { atlas: 'His own: the Atlas', inference: 'His own: a model on the 3
 const METAL_CUE_BEAT = (16 + 16 - 8) * 4;
 const OWN_ACTS = {
   metal: [{ label: 'Show the idea in the room', run: (L) => L.projector?.start(), need: 'projector' },
-    { label: 'See it on the facades opposite', run: (L) => L.stage?.cue?.({ beat: METAL_CUE_BEAT, university: true }), go: 'university' }],
+    { label: 'See it on the facades opposite', run: (L) => L.stage?.cue?.({ beat: METAL_CUE_BEAT, university: true }), go: 'university' },
+    { label: 'Play with the panel', run: (L) => L.ledmatrix?.open(), need: 'pr_ledmatrix' }],
   inference: [{ label: 'Replay the readout', run: (L) => L.gpu?.play() }],
 };
 const ATLAS_FIG = [['46', 'agents', '46 agents'], ['28', 'minutes', '28 minutes'], ['157', 'cards', '157 cards'], ['651', 'claims', '651 claims'],

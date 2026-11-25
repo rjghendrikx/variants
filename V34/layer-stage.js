@@ -236,10 +236,12 @@ export default function mount(live) {
   const NBLK = NBX * Math.ceil(NF / BLOCK[1]);
   const preset = resolve(FACADE, params.get('facade'));
   const classic = params.has('classic') || preset.mode === 'classic';
-  const life = classic ? null : makeFacade({ W: NC, H: NF, seed: seedFrom(params, 606), bpm: BPM, sections: SECTIONS, preset });
-  RAMPS.office = RAMPS.tube.map(([st, c], j) => [st, c.map((v, q) => v + (RAMPS.home[j][1][q] - v) * clamp(preset.warmth || 0))]);
+  const seed = seedFrom(params, 606), own = classic ? null : makeFacade({ W: NC, H: NF, seed, bpm: BPM, sections: SECTIONS, preset });
+  let life = own, follow = null;
+  const warm = (w) => { RAMPS.office = RAMPS.tube.map(([st, c], j) => [st, c.map((v, q) => v + (RAMPS.home[j][1][q] - v) * clamp(w || 0))]); };
+  warm(preset.warmth);
   const houseBias = life ? Float32Array.from({ length: BARS * 4 + 64 }, (_, i) => life.houseBias(i)) : null;
-  let stillF = null, gOs = 1, inView = true;
+  let stillF = null, gOs = 1, inView = true, fresh = false;
   const sphere = new THREE.Sphere().setFromPoints(offices.map((i) => panels[i].pos));
   const frustum = new THREE.Frustum(), pv = new THREE.Matrix4();
   function facadeInView() {
@@ -422,11 +424,12 @@ export default function mount(live) {
     const still = reduce(), k0 = k;
     k = clamp(k + (want ? dt / (still ? T_STILL : playing ? 0.6 : T_IN) : -dt / (still ? T_STILL : T_OUT)));
     clock += dt;
-    if (!still && !playing) b = (b + (dt * BPM) / 60) % (BARS * 4);
+    if (!still && !playing) b = (b + (dt * BPM) / 60 * (follow ? clamp(follow.speed ?? 1, 0.25, 1.5) : 1)) % (BARS * 4);
     const was = mesh.visible;
     mesh.visible = k > 0;
     if (k === 0) { if (!want) settled = true; return was; }
-    if (still && k === k0 && was) return false;
+    if (still && k === k0 && was && !fresh) return false;
+    fresh = false;
     U.uK.value = k * k * (3 - 2 * k);
     if (life && !want && !still && was) return true;
     const mix = playing ? { xf: deck().xf, ch: deck().ch, low: deck().low } : { xf: 0.5, ch: [1, 1], low: 1 };
@@ -473,6 +476,15 @@ export default function mount(live) {
     onView() { settled = false; },
     api: {
       set, cue, toggle: () => set(!forced),
+      follow(p) {
+        if (classic) return false;
+        if (!p) { if (follow) { follow = null; life = own; warm(preset.warmth); U.uO.value = stops('office'); stillF = null; fresh = true; life.jump(); } return false; }
+        const { mode, ...knobs } = p;
+        if (!follow || follow.mode !== mode) life = makeFacade({ W: NC, H: NF, seed, bpm: BPM, sections: SECTIONS, preset: { ...preset, ...p } });
+        else Object.assign(life.preset, knobs);
+        follow = { ...p }; warm(p.warmth); U.uO.value = stops('office'); stillF = null; fresh = true;
+        settled = false; live.render(); return true;
+      },
       advance(sec, h = 1 / 60) { let s = Math.round(sec / h); while (s-- > 0) { live.deckStep?.(h); timed(h); } live.render(); return k; },
       at(beat, h = 1 / 60) { b = Math.max(0, beat - 16); let s = Math.round((16 * 60) / BPM / h);
         while (s-- > 0) timed(h); live.render(); return +b.toFixed(3); },
@@ -495,7 +507,7 @@ export default function mount(live) {
       info: () => ({ on: forced || !!deck()?.playing, near, forced, uniOnly, deck: !!deck()?.playing, k: +k.toFixed(3), beat: +(deck()?.playing ? deck().beat : b).toFixed(2),
         visible: mesh.visible, settled, seen, panels: N, university: offices.length, houses: houses.length, cols: NC, floors: NF,
         pattern: lastF ? `${lastF.kind} ${lastF.secBeat.toFixed(1)}/${lastF.secLen}` : 'none', ramps: [rampO, rampH],
-        held: [gov[0].held, gov[1].held], mode: life ? 'life' : 'classic', preset: classic ? 'classic' : preset.name, inView,
+        held: [gov[0].held, gov[1].held], mode: life ? 'life' : 'classic', preset: classic ? 'classic' : follow ? `follow ${follow.mode}` : preset.name, inView,
         life: life ? { ...life.stats, E: +life.stats.E.toFixed(3), hum: +life.stats.hum.toFixed(4), mean: +life.stats.mean.toFixed(4) } : null }),
     },
   };

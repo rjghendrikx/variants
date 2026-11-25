@@ -23,7 +23,24 @@ export const DEFAULTS = {
   hum: 0.12,
   hold_glow: 0.3,
   interior: 0,
+  speed: 1,
+  mapping: 'cartesian',
 };
+export const FIELDS = {
+  breathe: { hz: 0.30, spread: 0.15, shape: 'sine' },
+  wave: { hz: 0.32, spread: 1.5, shape: 'sine' },
+  bloom: { hz: 0.45, spread: 0.55, shape: 'ad', a: 0.04, d: 0.4, curve: 2 },
+};
+export const MAPPINGS = ['grid', 'cartesian', 'polar'];
+export function coords(W, H, mapping, wy = 1) {
+  const N = W * H, u = new Float32Array(N), cx = (W - 1) / 2, cy = (H - 1) / 2, rmax = Math.hypot(cx, cy * wy) || 1;
+  for (let i = 0; i < N; i++) {
+    const x = i % W, y = (i / W) | 0;
+    u[i] = mapping === 'grid' ? i / Math.max(1, N - 1) : mapping === 'polar' ? Math.hypot(x - cx, (y - cy) * wy) / rmax
+      : (x / Math.max(1, W - 1) + y / Math.max(1, H - 1)) / 2;
+  }
+  return u;
+}
 export function resolve(json, name) {
   const ps = json?.presets || {}, key = name && ps[name] ? name : json?.active && ps[json.active] ? json.active : null;
   const p = key ? ps[key] : {}, rate = { ...DEFAULTS.rate, ...(p.rate || {}) };
@@ -325,6 +342,22 @@ function makeSparks(W, H, WY, c) {
   return { s, reset, step, render, drop, dist };
 }
 
+function makeField(W, H, WY, c) {
+  const N = W * H, s = { t: 0, fires: 0, E: 0, hum: 0, hold: false, R: 0, b: 0, rate: 0, dF: new Float64Array(N) };
+  let key = null, U = null;
+  const coord = () => { if (key !== c.mapping) { key = c.mapping; U = coords(W, H, c.mapping, WY); } return U; };
+  function render(out) {
+    const f = FIELDS[c.mode], u = coord(), p0 = f.hz * s.t;
+    for (let i = 0; i < N; i++) {
+      const p = p0 - f.spread * u[i];
+      if (f.shape === 'sine') out[i] = 0.5 + 0.5 * Math.sin(TAU * p);
+      else { const q = p - Math.floor(p); out[i] = clamp(q < f.a ? q / f.a : 1 - (q - f.a) / f.d) ** f.curve; }
+    }
+  }
+  return { s, render, reset() {}, drop() {}, dist: () => 0,
+    step(dt) { s.t += dt * clamp(c.speed ?? 1, 0.25, 1.5); } };
+}
+
 function makeReveal(N) {
   const st = { m: 0.05, T: 0 }, act = new Float32Array(N);
   function apply(x, y, dt, dens) {
@@ -342,8 +375,8 @@ function makeReveal(N) {
 }
 
 export function makeFacade({ W, H, seed = 1, bpm, sections, wy = 2.0, preset = {} }) {
-  const c = { ...DEFAULTS, ...preset, rate: { ...DEFAULTS.rate, ...(preset.rate || {}) } }, sparks = c.mode === 'sparks';
-  const N = W * H, sys = sparks ? makeSparks(W, H, wy, c) : makeSystem(W, H, wy), rev = makeReveal(N), score = makeScore(bpm, sections), spb = 60 / bpm;
+  const c = { ...DEFAULTS, ...preset, rate: { ...DEFAULTS.rate, ...(preset.rate || {}) } }, sparks = c.mode === 'sparks', field = !!FIELDS[c.mode];
+  const N = W * H, sys = field ? makeField(W, H, wy, c) : sparks ? makeSparks(W, H, wy, c) : makeSystem(W, H, wy), rev = makeReveal(N), score = makeScore(bpm, sections), spb = 60 / bpm;
   const clk = { beat: 0, bpm }, raw = new Float32Array(N), tgt = new Float32Array(N), L = new Float32Array(N), k = {};
   const last = new Float32Array(N), dirn = new Int8Array(N), cand = new Int8Array(N), blk = new Uint8Array(N), Lprev = new Float32Array(N);
   const [pr, pc] = [Math.min(PATCH[0], H), Math.min(PATCH[1], W)], PX = W - pc + 1, PY = H - pr + 1, NP = PX * PY + 1;
@@ -400,7 +433,9 @@ export function makeFacade({ W, H, seed = 1, bpm, sections, wy = 2.0, preset = {
     clk.beat = B; sys.step(STEP, clk, k);
     if (lowHeld && s.latch && !selfDone && s.dropT === s.t) selfDone = true;
     sys.render(raw, k);
-    if (sparks) tgt.set(raw); else rev.apply(raw, tgt, STEP, c.density === 1 ? k.dens : clamp(k.dens * c.density));
+    if (sparks) tgt.set(raw);
+    else if (field) rev.apply(raw, tgt, STEP, clamp(c.density, 0.05, 1));
+    else rev.apply(raw, tgt, STEP, c.density === 1 ? k.dens : clamp(k.dens * c.density));
     const late = k.kind === 'build' ? sm(0.8, 0.9, k.build) : 0, td = c.decay + (c.decay_late - c.decay) * late;
     const ka = 1 - Math.exp(-STEP / c.attack), kd = 1 - Math.exp(-STEP / td);
     Lprev.set(L);
@@ -415,7 +450,7 @@ export function makeFacade({ W, H, seed = 1, bpm, sections, wy = 2.0, preset = {
   return {
     N, L, score, stats, sys, preset: c,
     frame(dt, B, low = 1) {
-      if (jumpNext || Math.abs(B - (prevB + dt / spb)) > 0.5) { resync(B); jumpNext = false; }
+      if (jumpNext || (!field && Math.abs(B - (prevB + dt / spb)) > 0.5)) { resync(B); jumpNext = false; }
       prevB = B; acc += dt;
       let n = 0;
       if (acc >= STEP - 1e-9) { acc = Math.min(acc - STEP, STEP); n++; tick(B - acc / spb, low); }
@@ -423,6 +458,10 @@ export function makeFacade({ W, H, seed = 1, bpm, sections, wy = 2.0, preset = {
     },
     jump() { jumpNext = true; },
     still() {
+      if (field) {
+        sys.s.t = 2; resync(0); for (let n = 0; n < 60; n++) tick(0, 1);
+        const out = Float32Array.from(L, (v) => 0.85 * v); jumpNext = true; return out;
+      }
       if (sparks) {
         resync(136); for (let n = 0; n < 30; n++) tick(136 + n * STEP / spb, 1);
         const out = Float32Array.from(L, (v) => 0.85 * v); jumpNext = true; return out;
