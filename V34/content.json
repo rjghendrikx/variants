@@ -265,9 +265,12 @@
  "deck": {
   "title": "Night Shift (room loop)",
   "artist": "Ruud Hendrikx",
-  "tag": "SYNTH",
-  "empty": "No track loaded",
-  "browse": "Browse to load"
+  "tag": "SYNTH"
+ },
+ "deck_b": {
+  "title": "Tidewater (room loop)",
+  "artist": "Ruud Hendrikx",
+  "tag": "SYNTH"
  },
  "cards": [
   [
@@ -371,7 +374,7 @@
    {
     "kicker": "Listening corner",
     "title": "The decks",
-    "body": "Two decks and a two-channel mixer. Press play and the facades across the water play along: the left fader drives the University's offices, the right the canal houses, the crossfader balances the two, and a low cut drops them into a breakdown. What you hear is a house loop synthesised in the browser at 122 BPM."
+    "body": "Two decks and a two-channel mixer, a record of his own on each: warm deep house on the left, minimal techno-house on the right. Start either and the facades across the water play along. Start the other while one plays and it comes in on the beat, the crossfader handing over in eight bars. A low cut drops the facade into a breakdown. Both records are synthesised in the browser at 122 BPM."
    }
   ],
   [

@@ -1,5 +1,5 @@
 import { noPick, seedFrom } from './layer-common.js';
-import { BARS, BPM, SECTIONS, features } from './layer-deck.js';
+import { BARS, BPM, SECTIONS, TRACKS, features } from './layer-deck.js';
 import { makeFacade, resolve } from './facade-life.js';
 
 const FACADE = await fetch(new URL('./facade.json', import.meta.url)).then((r) => r.json())
@@ -238,6 +238,9 @@ export default function mount(live) {
   const classic = params.has('classic') || preset.mode === 'classic';
   const seed = seedFrom(params, 606), own = classic ? null : makeFacade({ W: NC, H: NF, seed, bpm: BPM, sections: SECTIONS, preset });
   let life = own, follow = null;
+  const owns = [own, null];
+  const engineOf = (i) => (follow || classic || !i ? life : (owns[i] ??= makeFacade({ W: NC, H: NF, seed, bpm: BPM, sections: TRACKS[i].SECTIONS, preset })));
+  let blend = null;
   const warm = (w) => { RAMPS.office = RAMPS.tube.map(([st, c], j) => [st, c.map((v, q) => v + (RAMPS.home[j][1][q] - v) * clamp(w || 0))]); };
   warm(preset.warmth);
   const houseBias = life ? Float32Array.from({ length: BARS * 4 + 64 }, (_, i) => life.houseBias(i)) : null;
@@ -433,8 +436,9 @@ export default function mount(live) {
     U.uK.value = k * k * (3 - 2 * k);
     if (life && !want && !still && was) return true;
     const mix = playing ? { xf: deck().xf, ch: deck().ch, low: deck().low } : { xf: 0.5, ch: [1, 1], low: 1 };
-    const B = still ? 4 * 40 + 1.5 : playing ? deck().beat : b;
-    const f = features(B, mix.low);
+    const P = playing && !still && deck().parts ? deck().parts() : null;
+    const B = still ? 4 * 40 + 1.5 : P ? P[0].beat : playing ? deck().beat : b;
+    const f = P && deck().features ? deck().features() : features(B, mix.low);
     lastF = f;
     smoothE.e = still ? f.energy : smoothE.e + (f.energy - smoothE.e) * (1 - Math.exp(-dt / 0.4));
     if (!life) program(B, (B * 60) / BPM, f, mix);
@@ -451,7 +455,12 @@ export default function mount(live) {
       inView = facadeInView();
       gOs += (gO - gOs) * ka;
       if (inView && want) {
-        const L = life.frame(dt, B, mix.low);
+        let L;
+        if (P && P.length > 1 && !follow) {
+          blend ??= new Float32Array(NC * NF); blend.fill(0);
+          for (const p of P) { const Li = engineOf(p.i).frame(dt, p.beat, mix.low); for (let c = 0; c < blend.length; c++) blend[c] += p.w * Li[c]; }
+          L = blend;
+        } else L = engineOf(P ? P[0].i : 0).frame(dt, B, mix.low);
         for (const i of offices) arr[i] = gOs * (0.03 + 0.97 * Math.min(1, L[cellOf[i]] * scaleO));
       } else life.jump();
     } else for (const i of offices) {

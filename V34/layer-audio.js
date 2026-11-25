@@ -1,7 +1,7 @@
 import { rng, seedFrom } from './layer-common.js';
 
 const STORE_KEY = 'room.sound';
-const MASTER = 0.6;
+export const MASTER = 0.6;
 const FADE_IN = 0.9, FADE_OUT = 0.35;
 const GLASS = 0.35;
 const DUCK = 0.4;
