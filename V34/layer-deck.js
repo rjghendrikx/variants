@@ -432,9 +432,11 @@ export default function mount(live) {
   }
   const running = () => eng && live_on && ctx.state === 'running';
   const rec = [0, 1].map(() => ({ state: 'none', bytes: null, ms: 0, lead: 0, timer: 0 }));
+  const SYNTH_ONLY = matchMedia('(pointer: coarse)').matches && !new URLSearchParams(location.search).has('records');
   function load(i) {
     const r = rec[i];
     if (r.state !== 'none' || !eng) return;
+    if (SYNTH_ONLY) { r.state = 'synth'; return; }
     r.state = 'loading'; const t0 = performance.now();
     (r.bytes ? Promise.resolve(r.bytes) : fetch(recUrl(i)).then((res) => { if (!res.ok) throw new Error(res.status); return res.arrayBuffer(); }))
       .then((b) => { r.bytes = b; return ctx.decodeAudioData(b.slice(0)); })

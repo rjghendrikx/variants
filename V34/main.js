@@ -40,6 +40,7 @@ const OWN_ACTS = {
     { label: 'See it on the facades opposite', run: (L) => L.stage?.cue?.({ beat: METAL_CUE_BEAT, university: true }), go: 'university' },
     { label: 'Play with the panel', run: (L) => L.ledmatrix?.open(), need: 'pr_ledmatrix' }],
   inference: [{ label: 'Replay the measured run', run: (L) => L.gpu?.play() }],
+  atlas: [{ label: 'Read the Atlas', href: '/atlas/' }],
 };
 const ATLAS_FIG = [['46', 'agents', '46 agents'], ['28', 'minutes', '28 minutes'], ['157', 'cards', '157 cards'], ['651', 'claims', '651 claims'],
   ['8', 'of 2,144 citations unresolved', '2,144 citations, 8 are unresolved']];
