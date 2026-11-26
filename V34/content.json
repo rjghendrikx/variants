@@ -510,6 +510,14 @@
    }
   ],
   [
+   "pr_globe",
+   {
+    "kicker": "His own · the Atlas",
+    "title": "The globe",
+    "body": "An old world in sepia: coastlines, no borders. It opens his Agentic SWE Atlas, where one run of 46 agents mapped the writing of 102 people on building software with agents."
+   }
+  ],
+  [
    "pr_3090",
    {
     "kicker": "His own · local inference",

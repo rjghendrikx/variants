@@ -101,9 +101,10 @@ const HOT = {
   pr_xdj: 'decks', pr_djm450: 'decks',
   pr_tape: 'tape',
   pr_midi: 'decks', pr_mapkit: 'decks',
+  pr_globe: 'terminal',
 };
-const CASE_OF = { pr_3090: 'inference', pr_nr200: 'inference', projector: 'metal', pr_ledmatrix: 'metal' };
-const OWN_TAG = { inference: 'Local inference', metal: 'Metal visuals' };
+const CASE_OF = { pr_3090: 'inference', pr_nr200: 'inference', projector: 'metal', pr_ledmatrix: 'metal', pr_globe: 'atlas' };
+const OWN_TAG = { inference: 'Local inference', metal: 'Metal visuals', atlas: 'Agentic SWE Atlas' };
 const CLOSE = { inference: { node: 'pr_3090', from: 'bench', fill: 0.5 }, metal: { node: 'pr_ledmatrix', from: 'hifi', fill: 0.4 } };
 const HOT_BELOW = { cz_bookcase: { id: 'wall', y: 0.9 } };
 const ACT = { experiment: (L) => L.projector?.start(), projector: (L) => L.projector?.start() };
