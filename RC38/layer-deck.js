@@ -658,6 +658,8 @@ export default function mount(live) {
       release(i);
       if (S.fade) {
         const { f0, from } = S.fade.m; endMix();
+        const w = S.d[o];
+        if (from === i && w.playing && w.t < w.tin - 1e-6) { w.t = w.tin; if (eng && live_on) eng.start(o, ctx.currentTime + 0.05 - w.t, w.t / SPB); }
         for (const k of [0, 1]) { glide(k, 'eq', [0, 0, 0], TIDY.stop); glide(k, 'ch', k === from ? f0 : 1, TIDY.stop); }
         mixAudio();
       }
@@ -692,6 +694,7 @@ export default function mount(live) {
   }
   function emit() { draw(); live.render(); dispatchEvent(new CustomEvent('room:deck', { detail: { playing: any() } })); }
   function set(k, v) {
+    if (glides.length && k !== 'f1' && k !== 'f2') { for (const g of glides) putV(g.i, g.what, Array.isArray(g.to) ? [...g.to] : g.to); glides = []; if (eng && live_on) eng.unmix(); }
     if (k === 'xf') S.xf = Math.min(1, Math.max(0, v));
     else if (k === 'ch1' || k === 'ch2') S.ch[k === 'ch1' ? 0 : 1] = Math.min(1, Math.max(0, v));
     else if (k === 'low') S.eq.forEach((e) => { e[0] = v ? -1 : 0; });
@@ -699,7 +702,6 @@ export default function mount(live) {
     else if (/^(mid|hi)[12]$/.test(k)) S.eq[+k.at(-1) - 1][k.startsWith('mid') ? 1 : 2] = Math.min(1, Math.max(-1, v));
     else if (k === 'f1' || k === 'f2') S.filt[k === 'f1' ? 0 : 1] = Math.min(1, Math.max(-1, Math.abs(v) < 0.04 ? 0 : v));
     if (S.fade && k !== 'f1' && k !== 'f2') endMix();
-    if (glides.length && k !== 'f1' && k !== 'f2') { glides = []; if (eng && live_on) eng.unmix(); }
     keepAll();
     controls(); mixAudio(); live.render();
   }
