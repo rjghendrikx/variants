@@ -266,7 +266,8 @@ export default function mount(live) {
   }
   const spotAt = (clientX, clientY) => spotOf(live.resolveAt(clientX, clientY));
 
-  const leads = (s) => { const id = live.hot?.(s.node); return !!id && (id !== live.view() || live.cardOf?.(id) === s.name); };
+  const onShow = (s) => { const t = document.querySelector('.case h2')?.textContent; return !!t && t === s.title && !document.querySelector('.case')?.hidden; };
+  const leads = (s) => { const id = live.hot?.(s.node); return onShow(s) || (!!id && (id !== live.view() || live.cardOf?.(id) === s.name || !!live.own?.(id))); };
   let down = null;
   function hover(it, x, y, r) {
     if (mode === 'pinned' || mode === 'key') return;
