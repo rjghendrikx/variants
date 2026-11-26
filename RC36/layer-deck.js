@@ -3,7 +3,7 @@ import { C, FACES } from './content.js';
 import { masterChain, MASTER } from './layer-audio.js';
 
 export const BPM = 122;
-export const XF_BARS = 8;
+export const MIX = { phrase: 4, inBars: 4, park: 0.25, hand: 0.75, outBars: 4, edge: 0.02, cutDb: -30 };
 export const REC = { files: ['deck-a.mp3', 'deck-b.mp3'], pre: 0.5, click: 0.25 };
 export const recUrl = (i) => new URL(`audio/${REC.files[i]}`, import.meta.url).href;
 export function leadOf(buf) {
@@ -78,6 +78,25 @@ export const TRACKS = [A, B];
 export const { SECTIONS, BARS, LENGTH, barInfo, features } = A;
 
 export const gains = (x) => [Math.cos((x * Math.PI) / 2), Math.sin((x * Math.PI) / 2)];
+export function mixPlan(i, cue, bm) {
+  const P = 4 * MIX.phrase, inB = P * Math.ceil((bm + LEAD_BEATS) / P), T = TRACKS[i];
+  const kick = (b) => b < T.BARS && T.barInfo(b).kick > 0 && T.barInfo(b).vac >= 0;
+  const lines = [2, 3, 4].map((k) => cue + k * MIX.phrase).filter(kick);
+  let bar = lines.find((b) => T.SEC_START.includes(b)) ?? lines[0];
+  for (let b = cue + 5 * MIX.phrase; bar == null && b < T.BARS; b += MIX.phrase) if (kick(b)) bar = b;
+  let sw = 4 * ((bar ?? cue + 2 * MIX.phrase) - cue);
+  const left = TRACKS[1 - i].BARS * 4 - inB - 4 * MIX.outBars;
+  if (sw > left) sw = Math.max(P, P * Math.floor(left / P));
+  return { inB, sw, end: sw + 4 * MIX.outBars };
+}
+const lin = (x, a, b) => Math.min(1, Math.max(0, (x - a) / (b - a)));
+export function mixAt(m, b) {
+  const e = (MIX.edge * BPM) / 60, park = Math.max(m.p0, MIX.park), hand = Math.max(park, MIX.hand);
+  const s = lin(b, m.sw - e, m.sw), sf = lin(b, m.sw, m.sw + 4);
+  const pre = m.p0 + (park - m.p0) * lin(b, 0, 4 * MIX.inBars);
+  const p = b < m.sw - e ? pre : b < m.sw ? park + (hand - park) * s : hand + (1 - hand) * lin(b, m.sw, m.end);
+  return { p, cut: [s, 1 - s], ps: b < m.sw ? pre : park + (p - park) * sf, keep: b < m.sw ? [1, 0] : [1 - sf, sf] };
+}
 
 function kit(E, at) {
   const { ctx } = E;
@@ -215,7 +234,7 @@ const hold = (p, at) => { if (p.cancelAndHoldAtTime) p.cancelAndHoldAtTime(at); 
 export function makeEngine(ctx, dest) {
   const { noise, dust } = buffers(ctx);
   const decks = TRACKS.map((T, i) => { const bus = makeBus(ctx, dest, i); return { T, i, bus, E: { ctx, in: bus.input, send: bus.send, noise, dust }, anchor: 0, next: 0, on: false, end: Infinity, downbeat: null,
-    buf: null, lead: 0, src: null, fileStep: Infinity }; });
+    buf: null, lead: 0, src: null, fileStep: Infinity, mix: null }; });
   const sp = 60 / BPM / 4;
   const fileAt = (d, when) => {
     const s = ctx.createBufferSource(), g = ctx.createGain();
@@ -250,22 +269,37 @@ export function makeEngine(ctx, dest) {
         }
         while (d.anchor + d.next * sp < until && d.next < d.T.BARS * 16) {
           const at = d.anchor + d.next * sp;
-          if (at >= ctx.currentTime - 1e-4 && at < d.end) { if (d.next < d.fileStep) VOICES[d.i](d.E, d.T, d.next, at); if (d.next % 16 === 0) d.downbeat = at; }
+          if (at >= ctx.currentTime - 1e-4 && at < d.end) {
+            if (d.next < d.fileStep) VOICES[d.i](d.E, d.T, d.next, at);
+            if (d.next % 16 === 0) {
+              d.downbeat = at; const m = decks.find((x) => x.mix)?.mix, ts = m && m.t0 + m.sw * 4 * sp;
+              if (m && Math.abs(at - ts) < 8 * sp) (m.db ??= [null, null])[d.i] = +((at - ts) * 1000).toFixed(3);
+            }
+          }
           d.next++;
         }
       }
     },
     xf(x, at = ctx.currentTime) { gains(x).forEach((v, i) => { const p = decks[i].bus.xfg.gain; hold(p, at); p.setTargetAtTime(v, at, 0.03); }); },
-    ramp(x0, x1, t0, t1) {
-      const now = ctx.currentTime, ts = Math.max(now, t0), n = 64;
-      decks.forEach((d, i) => {
-        const p = d.bus.xfg.gain, c = Float32Array.from({ length: n }, (_, k) => gains(x0 + ((x1 - x0) * k) / (n - 1))[i]);
-        hold(p, now); if (t1 > ts + 1e-3) p.setValueCurveAtTime(c, ts, t1 - ts); else p.setValueAtTime(c[n - 1], ts);
-      });
+    mix(m) {
+      const now = ctx.currentTime, b0 = Math.max(0, (now - m.t0) / (4 * sp)), e = (MIX.edge * BPM) / 60;
+      const knots = [b0];
+      for (let b = Math.ceil(b0 * 4 + 1e-6) / 4; b < m.end + 1e-6; b += 0.25) if (b < m.sw - e - 1e-6 || b > m.sw + 1e-6) knots.push(b);
+      knots.push(m.sw - e, m.sw); knots.sort((a, b) => a - b);
+      const at = (b) => Math.max(now, m.t0 + b * 4 * sp);
+      const params = [[m.from, 'xfg', (r) => gains(m.from + (m.to - m.from) * r.p)[m.from]], [m.to, 'xfg', (r) => gains(m.from + (m.to - m.from) * r.p)[m.to]],
+        [m.from, 'shelf', (r) => MIX.cutDb * r.cut[0]], [m.to, 'shelf', (r) => MIX.cutDb * r.cut[1]]];
+      for (const [i, node, f] of params) {
+        const p = decks[i].bus[node].gain; hold(p, now); p.setValueAtTime(f(mixAt(m, b0)), now);
+        for (const b of knots) if (b >= b0 && at(b) > now) p.linearRampToValueAtTime(f(mixAt(m, b)), at(b));
+      }
+      decks[m.to].mix = m;
     },
+    unmix() { const now = ctx.currentTime; for (const d of decks) { hold(d.bus.xfg.gain, now); hold(d.bus.shelf.gain, now); d.mix = null; } },
     strip(i, { ch, low, filt }) {
       const b = decks[i].bus, t = ctx.currentTime, [fhp, flp] = filterHz(filt);
-      b.fader.gain.setTargetAtTime(ch ** 2, t, 0.03); b.shelf.gain.setTargetAtTime(low < 0.5 ? -30 : 0, t, 0.03);
+      b.fader.gain.setTargetAtTime(ch ** 2, t, 0.03);
+      if (low != null) { hold(b.shelf.gain, t); b.shelf.gain.setTargetAtTime(low < 0.5 ? MIX.cutDb : 0, t, 0.03); }
       b.hp.frequency.setTargetAtTime(fhp, t, 0.02); b.lp.frequency.setTargetAtTime(flp, t, 0.02);
     },
   };
@@ -283,10 +317,10 @@ export async function renderDecks({ sec = 75, sr = 48000, deck = 0, from = 0, mi
     e.start(deck, -from * spb, from, 0); gains(deck).forEach((v, i) => { e.decks[i].bus.xfg.gain.value = v; });
   } else {
     e.start(0, -from * spb, from, 0); gains(0).forEach((v, i) => { e.decks[i].bus.xfg.gain.value = v; });
-    const bm = from + at / spb, bn = 4 * Math.ceil((bm + LEAD_BEATS) / 4), t0 = (bn - from) * spb, t1 = t0 + XF_BARS * 4 * spb;
-    e.start(1, t0, 0, t0 - 0.2); e.ramp(0, 1, t0, t1); e.decks[0].end = t1;
+    const pl = mixPlan(1, 0, from + at / spb), t0 = (pl.inB - from) * spb, t1 = t0 + pl.end * spb;
+    e.start(1, t0, 0, t0 - 0.2); e.mix({ ...pl, p0: 0, from: 0, to: 1, t0 }); e.decks[0].end = t1;
     e.decks[0].bus.out.gain.setTargetAtTime(0, t1, 0.04);
-    log.push({ in: t0, done: t1, barA: bn / 4 });
+    log.push({ in: t0, sw: t0 + pl.sw * spb, done: t1, barA: pl.inB / 4, swBars: pl.sw / 4 });
   }
   e.schedule(sec);
   const buf = await ctx.startRendering();
@@ -390,29 +424,36 @@ export default function mount(live) {
   scene.add(mesh);
 
   const reduce = () => live.reduceMotion.matches;
-  const S = { xf: 0, ch: [1, 1], low: [false, false], lowK: 1, filt: [0, 0], jog: [0, 0], d: [0, 1].map(() => ({ playing: false, t: 0, tin: 0 })), fade: null };
+  const S = { xf: 0, ch: [1, 1], low: [false, false], lowK: [1, 1], filt: [0, 0], jog: [0, 0], d: [0, 1].map(() => ({ playing: false, t: 0, tin: 0 })), fade: null, ps: null };
   const JOG_REV = 1.8;
   const SPB = 60 / BPM;
-  let ctx = null, eng = null, live_on = false, drawT = 0, cost = 0, frames = 0;
+  let ctx = null, eng = null, live_on = false, drawT = 0, cost = 0, frames = 0, lastMix = null;
   const beatOf = (i) => (S.d[i].t * BPM) / 60;
   const any = () => S.d[0].playing || S.d[1].playing;
   const heard = (i) => S.d[i].playing && S.d[i].t >= S.d[i].tin - 1e-6;
-  const weights = () => { const g = gains(S.xf); return [0, 1].map((i) => (heard(i) ? S.ch[i] ** 2 * g[i] : 0)); };
+  const weights = () => { const g = gains(S.ps ?? S.xf); return [0, 1].map((i) => (heard(i) ? S.ch[i] ** 2 * g[i] : 0)); };
   function parts() {
     const w = weights(), sum = w[0] + w[1], on = [0, 1].filter((i) => heard(i));
-    if (!on.length) { const i = S.d[1].playing && !S.d[0].playing ? 1 : 0; return [{ i, beat: Math.max(0, beatOf(i)), w: 1 }]; }
-    return on.map((i) => ({ i, beat: beatOf(i), w: sum > 1e-6 ? w[i] / sum : 1 / on.length })).sort((a, b) => b.w - a.w);
+    if (!on.length) { const i = S.d[1].playing && !S.d[0].playing ? 1 : 0; return [{ i, beat: Math.max(0, beatOf(i)), w: 1, low: S.lowK[i] }]; }
+    return on.map((i) => ({ i, beat: beatOf(i), w: sum > 1e-6 ? w[i] / sum : 1 / on.length, low: S.lowK[i], raw: w[i] })).sort((a, b) => b.w - a.w);
+  }
+  function lowHeard() {
+    const w = weights(), m = Math.max(w[0], w[1]);
+    return m > 1e-6 ? Math.min(1, (w[0] * S.lowK[0] + w[1] * S.lowK[1]) / m) : Math.min(S.lowK[0], S.lowK[1]);
   }
   function mixed() {
-    const P = parts(), f = TRACKS[P[0].i].features(P[0].beat, S.lowK);
+    const P = parts(), f = TRACKS[P[0].i].features(P[0].beat, P[0].low);
     if (P.length > 1) {
-      const g = TRACKS[P[1].i].features(P[1].beat, S.lowK), a = P[0].w, b = P[1].w;
-      for (const k of ['energy', 'fade', 'sparkle']) f[k] = a * f[k] + b * g[k];
+      const g = TRACKS[P[1].i].features(P[1].beat, P[1].low), a = P[0].w, b = P[1].w;
+      for (const k of ['fade', 'sparkle']) f[k] = a * f[k] + b * g[k];
+      const e = P.map((p) => p.raw * p.low), d = Math.max(e[0] + e[1], P[0].raw, P[1].raw);
+      f.energy = d > 1e-6 ? (e[0] * TRACKS[P[0].i].features(P[0].beat).energy + e[1] * TRACKS[P[1].i].features(P[1].beat).energy) / d : 0;
+      f.low = lowHeard();
     }
     return f;
   }
   live.show = { get playing() { return any(); }, get beat() { return parts()[0].beat; }, get xf() { return 0.5; },
-    get ch() { const w = weights(), g = Math.min(1, w[0] + w[1]); return [g, g]; }, get low() { return S.lowK; },
+    get ch() { const w = weights(), g = Math.min(1, w[0] + w[1]); return [g, g]; }, get low() { return lowHeard(); },
     stop: () => stopAll(), parts, features: mixed, sections: (i) => TRACKS[i].SECTIONS };
 
   function soundOn() { return !live.gate && !!window.__room?.layers?.audio?.info?.().on; }
@@ -449,13 +490,10 @@ export default function mount(live) {
   }
   function mixAudio() {
     if (!eng) return;
-    for (const i of [0, 1]) eng.strip(i, { ch: S.ch[i], low: S.lowK, filt: S.filt[i] });
+    for (const i of [0, 1]) eng.strip(i, { ch: S.ch[i], low: S.fade ? null : +!S.low[i], filt: S.filt[i] });
     if (!S.fade) eng.xf(S.xf);
   }
-  function rampAudio() {
-    const f = S.fade, d = eng.decks[f.to], t0 = d.anchor + S.d[f.to].tin, t1 = t0 + XF_BARS * 4 * SPB, now = ctx.currentTime;
-    if (now <= t0) eng.ramp(f.x0, f.x1, t0, t1); else eng.ramp(S.xf, f.x1, now, t1);
-  }
+  function rampAudio() { const m = S.fade.m; m.t0 = eng.decks[m.to].anchor + S.d[m.to].tin; eng.mix(m); }
   function syncAudio() {
     const want = any() && soundOn();
     if (want) {
@@ -486,16 +524,16 @@ export default function mount(live) {
     g2.font = F(24); g2.fillStyle = mute; g2.fillText('BPM', w - 110, y + 54);
     g2.fillText(`-${fmt(T.LENGTH - Math.max(0, d.t))}`, w - 110, y + 84);
     g2.fillStyle = '#e3a35b'; g2.fillText(tag, w - 230, y + 54);
-    const B = Math.max(0, beatOf(i)), f = T.features(B, S.lowK), wait = d.playing && d.t < d.tin;
-    const fd = S.fade && (S.fade.to === i || S.fade.from === i);
+    const B = Math.max(0, beatOf(i)), f = T.features(B, S.lowK[i]), wait = d.playing && d.t < d.tin;
+    const fd = S.fade && (S.fade.to === i || S.fade.from === i), cutTxt = S.low[i] ? '  LOW CUT' : '';
     g2.fillStyle = wait ? amber : d.playing ? '#9fd27a' : amber;
-    g2.fillText(wait ? `SYNC  in ${Math.ceil(((d.tin - d.t) * BPM) / 60)}` : d.playing ? `PLAY  ${f.bar + 1}.${Math.floor(f.beat % 4) + 1}  ${f.kind.toUpperCase()}${fd ? '  MIX' : ''}` : 'CUE', 16, y + 84);
+    g2.fillText(wait ? `SYNC  in ${Math.ceil(((d.tin - d.t) * BPM) / 60)}${cutTxt}` : d.playing ? `PLAY  ${f.bar + 1}.${Math.floor(f.beat % 4) + 1}  ${f.kind.toUpperCase()}${fd ? '  MIX' : ''}${cutTxt}` : 'CUE', 16, y + 84, w - 140);
     const y0 = y + 124, y1 = y + 222, mid = (y0 + y1) / 2, beats = 8;
     for (let x = 0; x < w; x += 2) {
       const bt = B + ((x - w / 2) / w) * 2 * beats;
       if (bt < 0 || bt >= T.BARS * 4) continue;
       const k = Math.floor(bt), ph = bt - k, kick = T.LOW[k] > 0.3 ? Math.exp(-ph * 6) : 0;
-      const lo = (0.5 * kick + 0.25 * T.LOW[k]) * (S.lowK), hi = T.HAT[k] * (0.4 + 0.6 * Math.abs(Math.sin(ph * Math.PI * 4))) * 0.35;
+      const lo = (0.5 * kick + 0.25 * T.LOW[k]) * S.lowK[i], hi = T.HAT[k] * (0.4 + 0.6 * Math.abs(Math.sin(ph * Math.PI * 4))) * 0.35;
       g2.fillStyle = '#b8642a'; g2.fillRect(x, mid - lo * 48, 2, lo * 96);
       g2.fillStyle = '#f0c8a0'; g2.fillRect(x, mid - (T.PAD[k] * 0.3) * 48, 2, T.PAD[k] * 0.3 * 96);
       g2.fillStyle = '#fff4e6'; g2.fillRect(x, mid - hi * 48, 2, hi * 96);
@@ -524,6 +562,7 @@ export default function mount(live) {
   }
   draw(); controls();
 
+  function endMix() { S.fade = null; S.ps = null; if (eng && live_on) eng.unmix(); }
   function play(v = true, i = 0) {
     const d = S.d[i], o = 1 - i;
     if (!v) {
@@ -531,7 +570,7 @@ export default function mount(live) {
       d.playing = false; d.t = Math.max(0, d.t);
       if (eng && live_on) eng.stop(i);
       release(i);
-      if (S.fade) { S.fade = null; if (S.d[o].playing) S.xf = o; controls(); mixAudio(); }
+      if (S.fade) { endMix(); if (S.d[o].playing) S.xf = o; S.low = [false, false]; S.lowK = [1, 1]; controls(); mixAudio(); }
       status(any() ? `Deck ${o + 1} playing ${META[o].title}` : `Stopped ${META[i].title} at ${fmt(d.t)}`);
       emit(); return false;
     }
@@ -539,14 +578,16 @@ export default function mount(live) {
     clearTimeout(rec[i].timer);
     if (d.t >= TRACKS[i].LENGTH - 0.05) d.t = 0;
     if (heard(o)) {
-      const bm = beatOf(o), bn = 4 * Math.ceil((bm + LEAD_BEATS) / 4), cue = 4 * Math.floor(Math.max(0, beatOf(i)) / 4) * SPB;
-      d.tin = cue; d.t = cue - (bn - bm) * SPB;
-      S.fade = { from: o, to: i, x0: S.xf, x1: i, bars: XF_BARS };
+      const bm = beatOf(o), cueBar = Math.floor(Math.max(0, beatOf(i)) / 4), cue = 4 * cueBar * SPB, pl = mixPlan(i, cueBar, bm);
+      d.tin = cue; d.t = cue - (pl.inB - bm) * SPB;
+      S.fade = { from: o, to: i, m: { ...pl, p0: Math.min(1, Math.max(0, (S.xf - o) / (i - o))), from: o, to: i, t0: 0, db: null } }; lastMix = S.fade.m;
+      S.low = i ? [S.low[0], true] : [true, S.low[1]]; S.lowK[i] = 0;
       d.playing = true;
-      if (eng && live_on) { const anchor = eng.decks[o].anchor + bn * SPB - cue; eng.start(i, anchor, cue / SPB); rampAudio(); }
-      status(`Deck ${i + 1} mixing in on the beat, ${XF_BARS} bars`);
+      if (eng && live_on) { const anchor = eng.decks[o].anchor + pl.inB * SPB - cue; eng.start(i, anchor, cue / SPB); rampAudio(); }
+      status(`Deck ${i + 1} mixing in on the phrase, its low end cut; the beat switch after ${pl.sw / 4} bars`);
     } else {
-      d.tin = d.t; d.playing = true; S.fade = null; S.xf = i;
+      if (S.fade) endMix();
+      d.tin = d.t; d.playing = true; S.xf = i;
       if (eng && live_on) { eng.start(i, ctx.currentTime + 0.05 - d.t, d.t / SPB); mixAudio(); }
       status(`Deck ${i + 1} playing ${META[i].title}, synthesised at ${BPM} BPM; the facades opposite play with it`);
     }
@@ -560,11 +601,13 @@ export default function mount(live) {
   }
   function emit() { draw(); live.render(); dispatchEvent(new CustomEvent('room:deck', { detail: { playing: any() } })); }
   function set(k, v) {
-    if (k === 'xf') { S.xf = Math.min(1, Math.max(0, v)); S.fade = null; }
+    if (k === 'xf') S.xf = Math.min(1, Math.max(0, v));
     else if (k === 'ch1' || k === 'ch2') S.ch[k === 'ch1' ? 0 : 1] = Math.min(1, Math.max(0, v));
-    else if (k === 'low') { S.low = [!!v, !!v]; }
+    else if (k === 'low') S.low = [!!v, !!v];
+    else if (k === 'low1' || k === 'low2') S.low[k === 'low1' ? 0 : 1] = !!v;
     else if (k === 'f1' || k === 'f2') S.filt[k === 'f1' ? 0 : 1] = Math.min(1, Math.max(-1, Math.abs(v) < 0.04 ? 0 : v));
-    S.lowK = S.low[0] || S.low[1] ? 0 : 1;
+    if (S.fade && (k === 'xf' || k.startsWith('low'))) endMix();
+    S.lowK = S.low.map((c) => (c ? 0 : 1));
     controls(); mixAudio(); live.render();
   }
   const live_ = document.querySelector('[role="status"]');
@@ -583,7 +626,7 @@ export default function mount(live) {
       const c = M.djm450_ch_centers[i];
       if (near(c, 'z', M.djm450_ch_len)) return () => set(`ch${i + 1}`, 0.5 - (l.z - c[2]) / M.djm450_ch_len);
       const k = M.djm450_low_knobs[i];
-      if (Math.hypot(l.x - k[0], l.z - k[2]) < M.djm450_knob_r * 1.6) return () => set('low', !S.low[i]);
+      if (Math.hypot(l.x - k[0], l.z - k[2]) < M.djm450_knob_r * 1.6) return () => set(`low${i + 1}`, !S.low[i]);
     }
     return null;
   }
@@ -669,9 +712,10 @@ export default function mount(live) {
     }
     const f = S.fade;
     if (f) {
-      const p = Math.min(1, Math.max(0, (S.d[f.to].t - S.d[f.to].tin) / (f.bars * 4 * SPB)));
-      S.xf = f.x0 + (f.x1 - f.x0) * p;
-      if (p >= 1) { S.fade = null; S.xf = f.x1; play(false, f.from); }
+      const b = (S.d[f.to].t - S.d[f.to].tin) / SPB, r = mixAt(f.m, b), x = (p) => f.from + (f.to - f.from) * p;
+      S.xf = x(r.p); S.ps = x(r.ps);
+      S.low[f.from] = r.cut[0] > 0.5; S.low[f.to] = r.cut[1] > 0.5; S.lowK[f.from] = r.keep[0]; S.lowK[f.to] = r.keep[1];
+      if (b >= f.m.end) { endMix(); S.xf = f.to; S.low[f.from] = false; S.lowK[f.from] = 1; play(false, f.from); mixAudio(); }
       controls();
     }
     if (!any()) { draw(); return true; }
@@ -713,7 +757,7 @@ export default function mount(live) {
     api: {
       play: (v, i = 0) => play(v ?? true, i), stop: (i) => (i == null ? stopAll() : play(false, i)), toggle, set, seek,
       advance(sec, h = 1 / 60) { let s = Math.round(sec / h); while (s-- > 0) timed(h); live.render(); return +S.d[0].t.toFixed(3); },
-      features: (beat, i) => (beat == null && i == null ? mixed() : TRACKS[i ?? 0].features(beat ?? beatOf(i ?? 0), S.lowK)),
+      features: (beat, i) => (beat == null && i == null ? mixed() : TRACKS[i ?? 0].features(beat ?? beatOf(i ?? 0), S.lowK[i ?? 0])),
       screen(what) {
         const pp = D.xdj_play_pos, p = what.startsWith('deck') ? wDk(pp ? [pp[0] + D.xdj_deck_x[+what[4]], D.xdj_top, pp[2]] : [D.xdj_deck_x[+what[4]], D.xdj_top, D.xdj_jog_center[2]])
           : what === 'xf' ? xfC.clone().addScaledVector(mxX, (S.xf - 0.5) * M.djm450_xf_len) : what.startsWith('ch') ? chC[+what[2] - 1].clone() : lowC[+what[3] - 1].clone();
@@ -739,8 +783,12 @@ export default function mount(live) {
         decks: S.d.map((d, i) => ({ playing: d.playing, heard: heard(i), waiting: d.playing && d.t < d.tin, t: +d.t.toFixed(3), tin: +d.tin.toFixed(3), beat: +beatOf(i).toFixed(3),
           title: META[i].title, length: +TRACKS[i].LENGTH.toFixed(1), sounding: !!eng?.decks[i].on && ctx?.state === 'running',
           source: eng ? eng.source(i) : 'synth', rec: { state: rec[i].state, ms: rec[i].ms, lead: +(rec[i].lead * 1000).toFixed(3), bytes: rec[i].bytes?.byteLength ?? 0 } })),
-        fade: S.fade && { ...S.fade }, weights: weights().map((w) => +w.toFixed(4)), phaseMs: phase(),
-        xf: S.xf, ch: [...S.ch], low: S.lowK < 0.5, filter: [...S.filt], filterHz: eng ? [eng.decks[0].bus.hp.frequency.value, eng.decks[0].bus.lp.frequency.value] : null,
+        fade: S.fade && { from: S.fade.from, to: S.fade.to, ...S.fade.m, bars: S.fade.m.end / 4, swBars: S.fade.m.sw / 4,
+          at: +((S.d[S.fade.to].t - S.d[S.fade.to].tin) / SPB).toFixed(3) },
+        weights: weights().map((w) => +w.toFixed(4)), phaseMs: phase(), lowHeard: +lowHeard().toFixed(4), lowK: [...S.lowK],
+        lowDb: eng ? eng.decks.map((d) => +d.bus.shelf.gain.value.toFixed(2)) : null, xfg: eng ? eng.decks.map((d) => +d.bus.xfg.gain.value.toFixed(4)) : null,
+        lastMix,
+        xf: S.xf, ch: [...S.ch], low: S.low[0] || S.low[1], lows: [...S.low], filter: [...S.filt], filterHz: eng ? [eng.decks[0].bus.hp.frequency.value, eng.decks[0].bus.lp.frequency.value] : null,
         audio: ctx?.state ?? 'none', sounding: live_on && ctx?.state === 'running' }),
     },
   };

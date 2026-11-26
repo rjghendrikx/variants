@@ -107,6 +107,7 @@ const HOT = {
 const CASE_OF = { pr_3090: 'inference', pr_nr200: 'inference', projector: 'metal', pr_ledmatrix: 'metal', pr_globe: 'atlas' };
 const OWN_TAG = { inference: 'Local inference', metal: 'Metal visuals', atlas: 'Agentic SWE Atlas' };
 const CLOSE = { inference: { node: 'pr_3090', from: 'bench', fill: 0.5 }, metal: { node: 'pr_ledmatrix', from: 'hifi', fill: 0.4 } };
+CLOSE.atlas = { node: 'pr_globe', from: 'overview', fill: 1.6, aim: 0.8, after: 'action' };
 const HOT_BELOW = { cz_bookcase: { id: 'wall', y: 0.9 } };
 const ACT = { experiment: (L) => L.projector?.start(), projector: (L) => L.projector?.start() };
 const FAR_VIEWS = ['canal', 'university'];
@@ -150,7 +151,8 @@ const WALK = { perMetre: 700, min: 650, max: 6000 };
 const ORBIT = { az: 0.35, polarUp: 0.18, polarDown: 0.12, near: 0.85, far: 1.12 };
 const PORTRAIT_MAX = 1.9;
 const PORTRAIT_SHIFT = [0.05, 0.14];
-const PORTRAIT_VIEW = { disks: { shift: [0, -0.10], max: 1.45 }, vitrine: { shift: [-0.05, 0.02], max: 1.4 }, c64: { shift: [-0.16, -0.22], max: 1.6 } };
+const PORTRAIT_VIEW = { disks: { shift: [0, -0.10], max: 1.45 }, vitrine: { shift: [-0.05, 0.02], max: 1.4 }, c64: { shift: [-0.16, -0.22], max: 1.6 },
+  atlas: { shift: [0, 0.10], max: 3.2 } };
 const PORTRAIT_PAGE = { c64: { shift: [-0.18, -0.18], max: 1.0 } };
 const paged = (id) => window.__room?.layers?.[id]?.info?.().disk != null;
 const shift3 = (s) => [s?.[0] ?? 0, s?.[1] ?? 0, s?.[2] ?? PORTRAIT_MAX];
@@ -291,10 +293,11 @@ async function start() {
     const node = scene.getObjectByName(c.node), from = views.find((v) => v.id === c.from);
     if (!node || !from || !CASES[id]) continue;
     const box = new THREE.Box3().setFromObject(node), target = box.getCenter(new THREE.Vector3());
+    if (c.aim != null) target.y = THREE.MathUtils.lerp(box.min.y, box.max.y, c.aim);
     const r = box.getBoundingSphere(new THREE.Sphere()).radius, fov = from.fov;
     const d = r / Math.tan(THREE.MathUtils.degToRad(fov) * c.fill / 2);
     const pos = target.clone().add(from.pos.clone().sub(target).normalize().multiplyScalar(d));
-    views.push({ id, label: OWN_TAG[id] ?? id, order: from.order + 0.5, pos, target, fov, close: true });
+    views.push({ id, label: OWN_TAG[id] ?? id, order: (views.find((v) => v.id === c.after) ?? from).order + 0.5, pos, target, fov, close: true });
     CASES[id].in = id;
     HOT[c.node] = id;
   }

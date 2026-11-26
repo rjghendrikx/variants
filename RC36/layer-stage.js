@@ -458,7 +458,7 @@ export default function mount(live) {
         let L;
         if (P && P.length > 1 && !follow) {
           blend ??= new Float32Array(NC * NF); blend.fill(0);
-          for (const p of P) { const Li = engineOf(p.i).frame(dt, p.beat, mix.low); for (let c = 0; c < blend.length; c++) blend[c] += p.w * Li[c]; }
+          for (const p of P) { const Li = engineOf(p.i).frame(dt, p.beat, p.low ?? mix.low); for (let c = 0; c < blend.length; c++) blend[c] += p.w * Li[c]; }
           L = blend;
         } else L = engineOf(P ? P[0].i : 0).frame(dt, B, mix.low);
         for (const i of offices) arr[i] = gOs * (0.03 + 0.97 * Math.min(1, L[cellOf[i]] * scaleO));
