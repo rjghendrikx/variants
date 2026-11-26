@@ -4,6 +4,13 @@ import { masterChain, MASTER } from './layer-audio.js';
 
 export const BPM = 122;
 export const XF_BARS = 8;
+export const REC = { files: ['deck-a.mp3', 'deck-b.mp3'], pre: 0.5, click: 0.25 };
+export const recUrl = (i) => new URL(`audio/${REC.files[i]}`, import.meta.url).href;
+export function leadOf(buf) {
+  const d = buf.getChannelData(0), n = Math.min(d.length, Math.floor(REC.pre * buf.sampleRate));
+  let k = 0; for (let i = 1; i < n; i++) if (Math.abs(d[i]) > Math.abs(d[k])) k = i;
+  return k / buf.sampleRate - REC.click;
+}
 const LEAD_BEATS = 1;
 const midi = (n) => 440 * 2 ** ((n - 69) / 12);
 const hash = (n) => { let x = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b); x ^= x >>> 13; x = Math.imul(x, 0xc2b2ae35); x ^= x >>> 16; return (x >>> 0) / 4294967296; };
@@ -93,6 +100,7 @@ const kick = (K, E, at, peak, d) => {
   K.env(a, at, 0.002, peak, d); o.connect(a).connect(E.in); o.start(at); o.stop(at + d + 0.08);
 };
 const SWING = 0.56;
+export const SCORE = { CHORDS, ROOTS, LINE, KICK, SWING };
 function voiceA(E, T, step, at) {
   const bar = Math.floor(step / 16), q = step % 16, b = T.barInfo(bar), beat = Math.floor(q / 4), sp = 60 / BPM / 4;
   if ((b.vac > 0 && beat >= 4 - b.vac) || (b.vac < 0 && beat < -b.vac)) return;
@@ -178,7 +186,7 @@ function makeBus(ctx, dest, i) {
   const G = (v = 1) => { const x = ctx.createGain(); x.gain.value = v; return x; };
   const F = (type, f, Q = 0.7) => { const x = ctx.createBiquadFilter(); x.type = type; x.frequency.value = f; x.Q.value = Q; return x; };
   const input = G(), send = G(), shelf = F('lowshelf', 220), hp = F('highpass', FILT_OPEN[0], 0.9), lp = F('lowpass', FILT_OPEN[1], 0.9);
-  const fader = G(), xfg = G(), out = G(0), tone = F('lowpass', i ? 16000 : 8500, 0.5);
+  const fader = G(), xfg = G(), out = G(0), rec = G(), tone = F('lowpass', i ? 16000 : 8500, 0.5);
   shelf.gain.value = 0;
   let head = input;
   if (!i) {
@@ -190,7 +198,8 @@ function makeBus(ctx, dest, i) {
   const dl = ctx.createDelay(2), fbF = F('lowpass', i ? 2000 : 1600, 0.5), fb = G(i ? 0.52 : 0.4), wet = G(i ? 0.6 : 0.45);
   dl.delayTime.value = (3 * 60) / BPM / 4;
   send.connect(dl); dl.connect(fbF).connect(fb).connect(dl); dl.connect(wet).connect(shelf);
-  return { input, send, shelf, hp, lp, fader, xfg, out };
+  rec.connect(shelf);
+  return { input, send, shelf, hp, lp, fader, xfg, out, rec };
 }
 function buffers(ctx) {
   const n = ctx.sampleRate, noise = ctx.createBuffer(1, n, n), d = noise.getChannelData(0);
@@ -205,21 +214,43 @@ function buffers(ctx) {
 const hold = (p, at) => { if (p.cancelAndHoldAtTime) p.cancelAndHoldAtTime(at); else { const v = p.value; p.cancelScheduledValues(at); p.setValueAtTime(v, at); } };
 export function makeEngine(ctx, dest) {
   const { noise, dust } = buffers(ctx);
-  const decks = TRACKS.map((T, i) => { const bus = makeBus(ctx, dest, i); return { T, i, bus, E: { ctx, in: bus.input, send: bus.send, noise, dust }, anchor: 0, next: 0, on: false, end: Infinity, downbeat: null }; });
+  const decks = TRACKS.map((T, i) => { const bus = makeBus(ctx, dest, i); return { T, i, bus, E: { ctx, in: bus.input, send: bus.send, noise, dust }, anchor: 0, next: 0, on: false, end: Infinity, downbeat: null,
+    buf: null, lead: 0, src: null, fileStep: Infinity }; });
   const sp = 60 / BPM / 4;
+  const fileAt = (d, when) => {
+    const s = ctx.createBufferSource(), g = ctx.createGain();
+    s.buffer = d.buf; g.gain.setValueAtTime(0, when); g.gain.linearRampToValueAtTime(1, when + 0.004);
+    s.connect(g).connect(d.bus.rec); s.start(when, Math.max(0, REC.pre + d.lead + when - d.anchor)); d.src = { s, g, when };
+  };
+  const cut = (d, at) => { if (!d.src) return; const { s, g } = d.src; hold(g.gain, at); g.gain.linearRampToValueAtTime(0, at + 0.01); s.stop(at + 0.02); d.src = null; };
   return {
     ctx, decks,
+    useFile(i, buf, lead = 0) { const d = decks[i]; d.buf = buf; d.lead = lead; if (!buf) { cut(d, ctx.currentTime); d.fileStep = Infinity; } },
+    move(i, anchor, next) {
+      const d = decks[i]; d.anchor = anchor; if (next != null) d.next = next;
+      if (d.src) { const now = ctx.currentTime; cut(d, now); fileAt(d, Math.max(now + 0.01, anchor)); }
+    },
+    source: (i) => (decks[i].src && ctx.currentTime >= decks[i].src.when ? 'file' : 'synth'),
     start(i, anchor, from, at = ctx.currentTime) {
       const d = decks[i]; d.anchor = anchor; d.next = Math.ceil(from * 4 - 1e-6); d.on = true; d.end = Infinity;
       d.bus.out.gain.cancelScheduledValues(at); d.bus.out.gain.setTargetAtTime(LEVEL, at, 0.05);
+      cut(d, at); d.fileStep = Infinity;
+      if (d.buf) { d.fileStep = d.next; fileAt(d, Math.max(at, anchor + from * 4 * sp)); }
     },
-    stop(i, at = ctx.currentTime) { const d = decks[i]; d.on = false; d.bus.out.gain.cancelScheduledValues(at); d.bus.out.gain.setTargetAtTime(0, at, 0.04); },
+    stop(i, at = ctx.currentTime) {
+      const d = decks[i]; d.on = false; d.bus.out.gain.cancelScheduledValues(at); d.bus.out.gain.setTargetAtTime(0, at, 0.04);
+      cut(d, at + 0.25); d.fileStep = Infinity;
+    },
     schedule(until) {
       for (const d of decks) {
         if (!d.on) continue;
+        if (d.buf && !d.src && d.fileStep === Infinity) {
+          const s = Math.ceil(d.next / 16) * 16;
+          if (s < d.T.BARS * 16) { d.fileStep = s; fileAt(d, d.anchor + s * sp); }
+        }
         while (d.anchor + d.next * sp < until && d.next < d.T.BARS * 16) {
           const at = d.anchor + d.next * sp;
-          if (at >= ctx.currentTime - 1e-4 && at < d.end) { VOICES[d.i](d.E, d.T, d.next, at); if (d.next % 16 === 0) d.downbeat = at; }
+          if (at >= ctx.currentTime - 1e-4 && at < d.end) { if (d.next < d.fileStep) VOICES[d.i](d.E, d.T, d.next, at); if (d.next % 16 === 0) d.downbeat = at; }
           d.next++;
         }
       }
@@ -240,13 +271,14 @@ export function makeEngine(ctx, dest) {
   };
 }
 
-export async function renderDecks({ sec = 75, sr = 48000, deck = 0, from = 0, mix = false, at = 20, limiter = true } = {}) {
+export async function renderDecks({ sec = 75, sr = 48000, deck = 0, from = 0, mix = false, at = 20, limiter = true, file = false } = {}) {
   const ctx = new OfflineAudioContext(2, Math.floor(sec * sr), sr), spb = 60 / BPM;
   let dest;
   if (limiter) { const m = masterChain(ctx); m.fade.gain.value = MASTER; dest = m.fade; }
   else { dest = ctx.createGain(); dest.gain.value = MASTER; dest.connect(ctx.destination); }
   const e = makeEngine(ctx, dest), log = [];
   for (const d of e.decks) d.bus.out.gain.value = 0;
+  if (file) for (const i of [0, 1]) { const b = await ctx.decodeAudioData(await (await fetch(recUrl(i))).arrayBuffer()); e.useFile(i, b, leadOf(b)); }
   if (!mix) {
     e.start(deck, -from * spb, from, 0); gains(deck).forEach((v, i) => { e.decks[i].bus.xfg.gain.value = v; });
   } else {
@@ -263,7 +295,7 @@ export async function renderDecks({ sec = 75, sr = 48000, deck = 0, from = 0, mi
 }
 
 const LOOK = 0.25;
-const LEVEL = 0.65;
+export const LEVEL = 0.65;
 const LIFT = 0.0012;
 const CAP = [0.018, 0.010, 0.011];
 const CANVAS = [512, 576];
@@ -399,6 +431,20 @@ export default function mount(live) {
     return ctx;
   }
   const running = () => eng && live_on && ctx.state === 'running';
+  const rec = [0, 1].map(() => ({ state: 'none', bytes: null, ms: 0, lead: 0, timer: 0 }));
+  function load(i) {
+    const r = rec[i];
+    if (r.state !== 'none' || !eng) return;
+    r.state = 'loading'; const t0 = performance.now();
+    (r.bytes ? Promise.resolve(r.bytes) : fetch(recUrl(i)).then((res) => { if (!res.ok) throw new Error(res.status); return res.arrayBuffer(); }))
+      .then((b) => { r.bytes = b; return ctx.decodeAudioData(b.slice(0)); })
+      .then((buf) => { r.state = 'ready'; r.ms = Math.round(performance.now() - t0); r.lead = leadOf(buf); eng.useFile(i, buf, r.lead); })
+      .catch(() => { r.state = 'failed'; });
+  }
+  function release(i) {
+    clearTimeout(rec[i].timer);
+    rec[i].timer = setTimeout(() => { if (!S.d[i].playing && rec[i].state === 'ready') { eng.useFile(i, null); rec[i].state = 'none'; } }, 30000);
+  }
   function mixAudio() {
     if (!eng) return;
     for (const i of [0, 1]) eng.strip(i, { ch: S.ch[i], low: S.lowK, filt: S.filt[i] });
@@ -419,6 +465,7 @@ export default function mount(live) {
         for (const i of [0, 1]) if (S.d[i].playing) eng.start(i, now - S.d[i].t, Math.max(S.d[i].t, S.d[i].tin) / SPB);
         mixAudio(); if (S.fade) rampAudio();
       }
+      for (const i of [0, 1]) if (S.d[i].playing) load(i);
     } else if (live_on) {
       live_on = false;
       for (const i of [0, 1]) eng.stop(i);
@@ -481,11 +528,13 @@ export default function mount(live) {
       if (!d.playing) return false;
       d.playing = false; d.t = Math.max(0, d.t);
       if (eng && live_on) eng.stop(i);
+      release(i);
       if (S.fade) { S.fade = null; if (S.d[o].playing) S.xf = o; controls(); mixAudio(); }
       status(any() ? `Deck ${o + 1} playing ${META[o].title}` : `Stopped ${META[i].title} at ${fmt(d.t)}`);
       emit(); return false;
     }
     if (d.playing) return true;
+    clearTimeout(rec[i].timer);
     if (d.t >= TRACKS[i].LENGTH - 0.05) d.t = 0;
     if (heard(o)) {
       const bm = beatOf(o), bn = 4 * Math.ceil((bm + LEAD_BEATS) / 4), cue = 4 * Math.floor(Math.max(0, beatOf(i)) / 4) * SPB;
@@ -566,7 +615,7 @@ export default function mount(live) {
     const s = S.d[g.i];
     if (s.playing && s.t >= s.tin) {
       s.t = Math.min(TRACKS[g.i].LENGTH - 0.1, Math.max(0, s.t + d * JOG_S));
-      if (running()) eng.decks[g.i].anchor = ctx.currentTime - s.t;
+      if (running()) eng.move(g.i, ctx.currentTime - s.t);
     }
     controls(); live.render();
   }
@@ -647,11 +696,11 @@ export default function mount(live) {
     const clock = both ? +(fold(S.d[1].t - S.d[0].t, bar) * 1000).toFixed(3) : null;
     const db = eng?.decks.map((d) => d.downbeat);
     const audio = both && db?.[0] != null && db?.[1] != null ? +(fold(db[1] - db[0], bar) * 1000).toFixed(3) : null;
-    return { clock, audio };
+    return { clock, audio, db: db?.map((v) => v && +v.toFixed(4)), src: eng?.decks.map((d) => d.src && +d.src.when.toFixed(4)), anchor: eng?.decks.map((d) => +d.anchor.toFixed(4)) };
   }
   const seek = (beat, i = 0) => {
     const d = S.d[i]; d.t = Math.max(0, beat * SPB); d.tin = Math.min(d.tin, d.t);
-    if (running() && d.playing) { const e = eng.decks[i]; e.anchor = ctx.currentTime + 0.05 - d.t; e.next = Math.ceil(beat * 4); }
+    if (running() && d.playing) eng.move(i, ctx.currentTime + 0.05 - d.t, Math.ceil(beat * 4));
     draw(); live.render(); return d.t;
   };
 
@@ -669,11 +718,25 @@ export default function mount(live) {
         const q = p.project(camera), r = live.renderer.domElement.getBoundingClientRect();
         return q.z > 1 ? null : [r.left + ((q.x + 1) / 2) * r.width, r.top + ((1 - q.y) / 2) * r.height];
       },
+      recCheck(i, bars) {
+        const d = eng?.decks[i]; if (!d?.buf) return null;
+        const b = d.buf, x = b.getChannelData(0), y = b.getChannelData(b.numberOfChannels > 1 ? 1 : 0), sr = b.sampleRate, a = 1 - Math.exp((-2 * Math.PI * 150) / sr), out = [];
+        for (const bar of bars) {
+          const bi = TRACKS[i].barInfo(bar); if (!bi.kick || bi.vac < 0) continue;
+          const t = REC.pre + d.lead + bar * 4 * SPB, i0 = Math.floor((t - 0.04) * sr), n = Math.floor(0.12 * sr), e = new Float32Array(n);
+          let s = 0, m = 0, k = 0;
+          for (let j = 0; j < n; j++) { s += a * ((x[i0 + j] + y[i0 + j]) / 2 - s); e[j] = Math.abs(s); m = Math.max(m, e[j]); }
+          while (k < n && e[k] < 0.5 * m) k++;
+          out.push(+(((i0 + k) / sr - t) * 1000).toFixed(2));
+        }
+        return out;
+      },
       grabAt: (x, y) => { const g = grabAt(x, y); return g && { kind: g.kind, i: g.i, x: g.x, y: g.y }; },
       cost() { const r = { ms: frames ? +(cost / frames).toFixed(4) : 0, frames }; cost = 0; frames = 0; return r; },
       info: () => ({ playing: any(), t: +S.d[0].t.toFixed(2), beat: +beatOf(0).toFixed(2), bpm: BPM, length: +A.LENGTH.toFixed(1), title: META[0].title, artist: META[0].artist,
         decks: S.d.map((d, i) => ({ playing: d.playing, heard: heard(i), waiting: d.playing && d.t < d.tin, t: +d.t.toFixed(3), tin: +d.tin.toFixed(3), beat: +beatOf(i).toFixed(3),
-          title: META[i].title, length: +TRACKS[i].LENGTH.toFixed(1), sounding: !!eng?.decks[i].on && ctx?.state === 'running' })),
+          title: META[i].title, length: +TRACKS[i].LENGTH.toFixed(1), sounding: !!eng?.decks[i].on && ctx?.state === 'running',
+          source: eng ? eng.source(i) : 'synth', rec: { state: rec[i].state, ms: rec[i].ms, lead: +(rec[i].lead * 1000).toFixed(3), bytes: rec[i].bytes?.byteLength ?? 0 } })),
         fade: S.fade && { ...S.fade }, weights: weights().map((w) => +w.toFixed(4)), phaseMs: phase(),
         xf: S.xf, ch: [...S.ch], low: S.lowK < 0.5, filter: [...S.filt], filterHz: eng ? [eng.decks[0].bus.hp.frequency.value, eng.decks[0].bus.lp.frequency.value] : null,
         audio: ctx?.state ?? 'none', sounding: live_on && ctx?.state === 'running' }),

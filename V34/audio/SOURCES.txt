@@ -45,3 +45,8 @@ creak.mp3 - a voice: wood settling, slowed down
   Creaky wooden casket, by stephan. Licence: Public domain (PDSounds).
   https://upload.wikimedia.org/wikipedia/commons/e/ec/Creaky_wooden_casket.ogg (origin http://www.pdsounds.org/sounds/creaky_wooden_casket)
   excerpt 0.0-1.38 s, mono, high-pass 120 Hz, low-pass 3500 Hz
+
+deck-a.mp3, deck-b.mp3 - the decks' two records (layer-deck.js), no recordings
+  Synthesised offline from the records' own score (tools/render_records.py): oscillators, filtered noise, and a
+  reverb whose impulse response is generated there too (decaying noise and early reflections). No samples, no
+  third-party audio. 0.5 s of pre-roll with one tone burst (the page's alignment mark), never played.

@@ -1339,6 +1339,7 @@ async function start() {
   if (GATE) state.three = { scene, camera, THREE };
   state.project = (p) => { const v = b2t(p).project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight, v.z]; };
   state.arrival = () => lastArrival;
+  state.hotNames = () => [...hot.keys()].map((o) => o.name);
   state.screenOf = (name) => { const o = scene.getObjectByName(name); if (!o) return null;
     const v = new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3()).project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; };
   state.hotMap = (step = 32, touch = coarse.matches) => {
