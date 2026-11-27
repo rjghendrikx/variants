@@ -1020,6 +1020,26 @@ async function start() {
   stack();
   if (typeof ResizeObserver === 'function') { const ro = new ResizeObserver(stack); for (const e of [capEl, nav]) if (e) ro.observe(e); }
   else addEventListener('resize', stack);
+  const BOXES = [
+    () => document.querySelector('.hs-card.on.pin'),
+    () => { const c = document.querySelector('.case'); return c && !c.hidden && c.childElementCount ? c : null; },
+    () => document.querySelector('.hs-card.on:not(.pin)'),
+    () => document.querySelector('.toast.on'),
+    () => document.querySelector('.nav-hint.on'),
+    () => document.querySelector('.caption'),
+  ];
+  let quieted = [];
+  const oneBox = () => {
+    let shown = null; const quiet = [];
+    for (const want of BOXES) { const el = want(); if (!el || !el.getClientRects().length) continue; if (shown) quiet.push(el); else shown = el; }
+    if (quiet.length === quieted.length && quiet.every((e, i) => e === quieted[i])) return;
+    for (const e of quieted) if (!quiet.includes(e)) e.classList.remove('box-quiet');
+    for (const e of quiet) e.classList.add('box-quiet');
+    quieted = quiet;
+  };
+  new MutationObserver(oneBox).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'hidden'] });
+  addEventListener('resize', oneBox);
+  oneBox();
   renderer.render(scene, camera);
   root.classList.add('ready');
 

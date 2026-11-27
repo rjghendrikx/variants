@@ -268,6 +268,7 @@
   .book-acts button:hover { background: rgba(38, 31, 26, .88); }
   .book-acts button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   .book-acts .prev, .book-acts .next { padding: 9px 0; font-size: 18px; }
+  .box-quiet { opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; transition: opacity .18s ease, visibility 0s linear .18s !important; }
   body.book-out > :not(.stage, .book-scrim, script, style) { opacity: 0 !important; pointer-events: none !important; transition: opacity .2s ease; }
   .away .prompt { display: none; }   
   .nav-hint { position: fixed; left: 50%; bottom: calc(max(18px, env(safe-area-inset-bottom, 0px)) + 52px); z-index: 4; margin: 0; transform: translateX(-50%);
