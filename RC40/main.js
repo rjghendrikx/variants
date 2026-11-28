@@ -75,7 +75,8 @@ for (const a of document.querySelectorAll('#work article[data-case]')) {
   CASES[id] = { ...c, in: a.dataset.in, acts: [...(OWN_ACTS[id] ?? []), ...c.acts] };
   CASES[a.dataset.in].acts.push({ label: OWN[id], case: id });
 }
-const CAPTION_OF = { disks: 'pr_floppybox', c64: 'c64', optics: 'optics', hifi: 'amp', canal: 'raindrop', decks: 'pr_xdj', tape: 'pr_tape', pipe: 'pr_pipe' };
+const CAPTION_OF = { disks: 'pr_floppybox', c64: 'c64', optics: 'optics', hifi: 'amp', canal: 'raindrop', decks: 'pr_xdj', tape: 'pr_tape' };
+const BARE_OF = { pipe: 'pr_pipe' };
 const PLACE_CARDS = C.place_cards;
 const DECK_ACT = (L) => (L.deck?.info().playing ? 'Stop the track' : 'Play the track');
 const CAPTION_ACTS = { optics: [{ label: POLARIZER, run: (L) => L.eraser?.toggle(false) }], decks: [{ label: DECK_ACT, run: (L) => L.deck?.toggle() }] };
@@ -996,7 +997,7 @@ async function start() {
   await Promise.all(loads);
   const layers = LIVE ? await mountLayers({ THREE, scene, camera, renderer, byName, gate: GATE, reduceMotion, picks,
     params, root, view: () => current.id, render: () => { needsRender = true; }, clickAt, resolveAt, intentAt, cursorOf,
-    moving: () => !!tween, go: (id, ...a) => (CASES[id]?.in ? openCase(id) : go(id, ...a)), card: (c) => showCase(current.id, c), panning: () => controls.enablePan, where: hotOf, intent: (x, y, touch) => intentAt(resolveAt(x, y), x, y, touch), cardOf: (id) => (!CASES[id] && CAPTION_OF[id]) || null,
+    moving: () => !!tween, go: (id, ...a) => (CASES[id]?.in ? openCase(id) : go(id, ...a)), card: (c) => showCase(current.id, c), panning: () => controls.enablePan, where: hotOf, intent: (x, y, touch) => intentAt(resolveAt(x, y), x, y, touch), cardOf: (id) => (!CASES[id] && (CAPTION_OF[id] ?? BARE_OF[id])) || null,
     hot: (o) => caseOf(topOf(o)) ?? hot.get(topOf(o)) ?? null, below: (o) => { const b = HOT_BELOW[topOf(o)?.name]; return b && views.some((v) => v.id === b.id) ? b : null; }, label: (id) => viewOf(id)?.label ?? OWN_TAG[id] ?? id, own: (id) => !!OWN_TAG[id], home: home.id, inRoom: () => inRoom(),
     pxPerMetre: () => { const a = innerWidth / innerHeight, t = Math.tan(THREE.MathUtils.degToRad(home.fov) / 2) * (a >= heroAspect ? 1 : Math.min(heroAspect / a, PORTRAIT_MAX));
       return innerHeight / (2 * t); },

@@ -554,15 +554,10 @@
    }
   ],
   [
-   "pr_manuscript",
-   "raindrop"
-  ],
-  [
    "pr_pipe",
    {
     "kicker": "On the windowsill",
-    "title": "Ceci n'est pas une pipe.",
-    "body": "Nor a painting. The frame holds no canvas and the pipe has depth. What is left is a mesh, lit by a bake. The map is not the territory."
+    "title": "Ceci n'est pas une pipe."
    }
   ]
  ],

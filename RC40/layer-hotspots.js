@@ -121,7 +121,7 @@ export default function mount(live) {
     const d = document.createElement('span');
     d.className = 'hs-sr';
     d.id = `hs-desc-${s.name}`;
-    d.textContent = s.body + (s.more ? ` Link: ${s.more.label}.` : '');
+    d.textContent = (s.body ?? '') + (s.more ? ` Link: ${s.more.label}.` : '');
     b.setAttribute('aria-describedby', d.id);
     li.append(b, d);
     ul.appendChild(li);
@@ -144,7 +144,8 @@ export default function mount(live) {
       kickerEl.textContent = spot.kicker ?? '';
       kickerEl.hidden = !spot.kicker;
       titleEl.textContent = spot.title;
-      bodyEl.textContent = spot.body;
+      bodyEl.textContent = spot.body ?? '';
+      bodyEl.hidden = !spot.body;
       moreEl.hidden = !spot.more;
       if (spot.more) { moreEl.href = spot.more.href; moreEl.textContent = spot.more.label; }
     }
